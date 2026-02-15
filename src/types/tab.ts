@@ -38,6 +38,8 @@ export interface TabSheet {
   artist: string;
   tuning: string[]; // e.g., ["E", "B", "G", "D", "A", "E"]
   rows: TabRow[];   // Vertical collection of staves
+  bpm: number;            // Beats Per Minute
+  timeSignature: number;  // Top number (e.g., 4 for 4/4)
 }
 
 /**

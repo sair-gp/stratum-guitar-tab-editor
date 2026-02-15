@@ -1,20 +1,23 @@
 /**
  * @file useKeyboardEngine.ts
- * @description The Unified Command Engine. 
- * Handles coordinate-based navigation, semantic shortcuts, and multi-digit fret entry.
+ * @description The Unified Command Engine for Stratum. 
+ * Handles coordinate-based navigation, semantic shortcuts, measure snapping, 
+ * multi-digit fret entry, and real-time audio triggers.
  */
 
 import { useEffect } from 'react';
 import { useTab } from '../store/TabContext';
 import { useShortcuts } from '../store/ShortcutContext';
+import { useAudioEngine } from './useAudioEngine';
 
 /**
  * Hook that listens for global keyboard events and dispatches actions to the TabStore.
- * Implements 'Measure Snapping' for rapid traversal of the 24-measure grid.
+ * Integrates the AudioEngine to provide immediate sonic feedback during entry.
  */
 export const useKeyboardEngine = () => {
   const { cursor, setCursor, updateNote, tabSheet, addRow, saveManual } = useTab();
   const { shortcuts } = useShortcuts();
+  const { playNote, initAudio } = useAudioEngine();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -23,6 +26,16 @@ export const useKeyboardEngine = () => {
        * the shortcut remapper, the editor engine is muted to prevent input collisions.
        */
       const target = e.target as HTMLElement;
+
+      const isMetadataInput = 
+        target.getAttribute('placeholder') === 'SONG_TITLE' || 
+        target.getAttribute('placeholder') === 'ARTIST_NAME' ||
+        target.hasAttribute('data-settings-input');
+
+      if (isMetadataInput) return; 
+
+      //const key = e.key.toLowerCase();
+
       if (target.tagName === 'INPUT' || target.hasAttribute('data-settings-input')) {
         return; 
       }
@@ -95,11 +108,20 @@ export const useKeyboardEngine = () => {
       // 7. FRET DATA ENTRY (NUMBERS 0-9)
       if (/^[0-9]$/.test(key)) {
         e.preventDefault();
+        
+        // ANALYTIC: Ensure Tone.js context is resumed/started on the first interaction.
+        initAudio(); 
+        
+        // Update the state in the Store
         updateNote(key);
+        
+        // METICULOUS: Trigger playback for the specific string and fret.
+        // We pass the current 'key' directly to avoid waiting for the async state update.
+        //playNote(cursor.stringIndex, key);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cursor, shortcuts, tabSheet.rows, updateNote, setCursor, addRow, saveManual]);
+  }, [cursor, shortcuts, tabSheet.rows, updateNote, setCursor, addRow, saveManual, playNote, initAudio]);
 };
