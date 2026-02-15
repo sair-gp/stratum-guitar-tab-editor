@@ -26,7 +26,7 @@ export const TabRowComponent = ({ row, rowIndex }: RowProps) => {
       </div>
 
       {/* The 24-Measure Grid */}
-      <div className="flex-1 grid grid-cols-24 bg-zinc-900/40 rounded-xl overflow-hidden border border-zinc-800 shadow-lg">
+      <div className="flex-1 grid grid-cols-16 w-full bg-zinc-900/40 rounded-xl overflow-hidden border border-zinc-800 shadow-lg">
         {row.columns.map((col, colIndex) => (
           <Column 
             key={col.id} 

@@ -36,11 +36,21 @@ export const useKeyboardEngine = () => {
 
       //const key = e.key.toLowerCase();
 
-      if (target.tagName === 'INPUT' || target.hasAttribute('data-settings-input')) {
+      /*if (target.tagName === 'INPUT' || target.hasAttribute('data-settings-input')) {
         return; 
-      }
+      }*/
 
       const key = e.key.toLowerCase();
+
+      // 0. SHORTCUT FOR JUMPING STAVES
+      if (e.altKey && (key === 'arrowup' || key === 'arrowdown')) {
+  e.preventDefault();
+  const direction = key === 'arrowdown' ? 1 : -1;
+  const newRow = Math.max(0, Math.min(tabSheet.rows.length - 1, cursor.rowIndex + direction));
+  
+  setCursor({ ...cursor, rowIndex: newRow });
+  return;
+}
 
       // 1. SYSTEM COMMANDS (CTRL + KEY)
       if (e.ctrlKey) {

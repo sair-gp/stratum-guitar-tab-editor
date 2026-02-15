@@ -34,19 +34,17 @@ export const useAudioEngine = () => {
     await Tone.start();
   }, []);
 
-  const playNote = useCallback((stringIndex: number, fret: string) => {
-    if (!sampler.current || !isLoaded || fret === "" || fret === "x") return;
+  const playNote = useCallback((stringIndex: number, fret: string, time?: number) => {
+  if (!sampler.current || !isLoaded || fret === "" || fret === "x") return;
 
-    const baseNote = tabSheet.tuning[stringIndex];
-    const fretNum = parseInt(fret);
-    
-    try {
-      const pitch = Tone.Frequency(baseNote).transpose(fretNum).toNote();
-      sampler.current.triggerAttackRelease(pitch, "4n");
-    } catch (e) {
-      console.warn("AUDIO_ERROR: Invalid pitch calculation.");
-    }
-  }, [tabSheet.tuning, isLoaded]);
+  const baseNote = tabSheet.tuning[stringIndex];
+  const fretNum = parseInt(fret);
+  
+  const pitch = Tone.Frequency(baseNote).transpose(fretNum).toNote();
+  
+  // Trigger note at the EXACT scheduled time
+  sampler.current.triggerAttackRelease(pitch, "8n", time); 
+}, [tabSheet.tuning, isLoaded]);
 
   return { initAudio, playNote, isLoaded };
 };

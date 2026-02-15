@@ -1,52 +1,60 @@
 /**
  * @file storage.ts
- * @description Meticulous wrapper for LocalStorage to ensure type-safe persistence 
- * for the Multi-Row TabSheet structure.
+ * @description Advanced Project Management for the Stratum Catalog.
  */
 
 import type { TabSheet } from '../types/tab';
 
-/**
- * Versioned storage key to prevent data corruption between architecture updates.
- * v2 supports the Multi-Row [TabRow] schema.
- */
-const STORAGE_KEY = 'bat_tab_v2_data';
+const STORAGE_KEY_V2 = 'bat_tab_v2_data'; // Your existing key
+const CATALOG_INDEX_KEY = 'stratum_catalog_index_v3';
+const PROJECT_PREFIX = 'stratum_project_';
+
+export interface ProjectMetadata {
+  id: string;
+  title: string;
+  lastModified: number;
+}
 
 /**
- * Persists the entire TabSheet state to the browser's LocalStorage.
- * @param data The current TabSheet object to be stringified and saved.
+ * Persists a single tab to local storage.
  */
 export const saveTabToLocal = (data: TabSheet): void => {
   try {
     const serializedData = JSON.stringify(data);
-    localStorage.setItem(STORAGE_KEY, serializedData);
+    localStorage.setItem(STORAGE_KEY_V2, serializedData);
+    
+    // Meticulous: Also update the catalog index
+    updateCatalogIndex(data);
   } catch (error) {
-    // Analytics: Logging the specific failure for debugging persistent storage limits
-    console.error("CRITICAL_ERROR: Failed to persist TabSheet to LocalStorage.", error);
+    console.error("CRITICAL_ERROR: Failed to persist TabSheet.", error);
   }
 };
 
 /**
- * Retrieves and validates the TabSheet from LocalStorage.
- * @returns The parsed TabSheet object or null if storage is empty or data is malformed.
+ * Loads the current tab from local storage.
  */
 export const loadTabFromLocal = (): TabSheet | null => {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (!data) return null;
-    
-    // Explicitly cast to TabSheet after parsing the JSON string
-    return JSON.parse(data) as TabSheet;
+    const data = localStorage.getItem(STORAGE_KEY_V2);
+    return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error("CRITICAL_ERROR: Failed to retrieve or parse LocalStorage data.", error);
     return null;
   }
 };
 
 /**
- * Wipes all saved tab data from the browser. 
- * Use only for 'Reset' operations to ensure a clean state.
+ * Catalog Internal: Updates the list of available projects.
  */
+const updateCatalogIndex = (data: TabSheet) => {
+  const index: ProjectMetadata[] = JSON.parse(localStorage.getItem(CATALOG_INDEX_KEY) || '[]');
+  const existing = index.find(p => p.title === data.title);
+  
+  if (!existing) {
+    index.push({ id: crypto.randomUUID(), title: data.title, lastModified: Date.now() });
+    localStorage.setItem(CATALOG_INDEX_KEY, JSON.stringify(index));
+  }
+};
+
 export const clearLocalStorage = (): void => {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.clear(); // Complete wipe to handle 24 -> 16 column transition
 };

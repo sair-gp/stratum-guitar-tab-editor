@@ -20,7 +20,7 @@ interface TabContextType {
 }
 
 const TabContext = createContext<TabContextType | undefined>(undefined);
-const FIXED_COLS = 24;
+const FIXED_COLS = 16;
 
 const createBlankColumn = (): TabColumn => ({
   id: crypto.randomUUID(),
