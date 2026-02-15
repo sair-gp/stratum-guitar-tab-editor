@@ -42,6 +42,15 @@ export const useKeyboardEngine = () => {
 
       const key = e.key.toLowerCase();
 
+      // If we are in ANY input that isn't part of the grid, 
+// the keyboard engine must stand down so you can type normally.
+const isGridCell = target.hasAttribute('data-editor-input');
+const isInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA';
+
+if (isInput && !isGridCell) {
+  return; 
+}
+
       // 0. SHORTCUT FOR JUMPING STAVES
       if (e.altKey && (key === 'arrowup' || key === 'arrowdown')) {
   e.preventDefault();

@@ -2,7 +2,7 @@
  * @file TabRowComponent.tsx
  * @description The horizontal staff container.
  */
-
+import React, { useEffect, useRef } from 'react';
 import type { TabRow } from '../../types/tab';
 import { Column } from './Column';
 import { TuningLabel } from './TuningLabel';
@@ -15,6 +15,20 @@ interface RowProps {
 
 export const TabRowComponent = ({ row, rowIndex }: RowProps) => {
   const { tabSheet } = useTab();
+  const { cursor } = useTab();
+  const rowRef = useRef<HTMLDivElement>(null);
+  /**
+   * AUTO-SCROLL:
+   * When the cursor moves to a new staff (rowIndex), we scroll it into center.
+   */
+  useEffect(() => {
+    if (cursor.rowIndex === rowIndex) {
+      rowRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center', //
+      });
+    }
+  }, [cursor.rowIndex, rowIndex]);
 
   return (
     <div className="flex items-start w-full group mb-12">

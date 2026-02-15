@@ -1,11 +1,12 @@
 /**
  * @file TabContext.tsx
  * @description Centralized state management for the Stratum editor.
+ * Upgraded to handle Multi-Project Cataloging and UUID-based switching.
  */
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { TabSheet, TabRow, TabColumn, CursorPosition } from '../types/tab';
-import { loadTabFromLocal, saveTabToLocal } from '../utils/storage';
+import { loadTabFromLocal, saveTabToLocal, storage } from '../utils/storage';
 
 interface TabContextType {
   tabSheet: TabSheet;
@@ -15,8 +16,10 @@ interface TabContextType {
   addRow: () => void;
   saveManual: () => void;
   updateTuning: (stringIndex: number, newNote: string) => void;
-  // Professional Metadata Update: Supports title, artist, bpm, and timeSignature
   updateMetadata: (field: keyof TabSheet, value: string | number) => void;
+  // CATALOG ACTIONS
+  loadProject: (id: string) => void;
+  createNewProject: () => void;
 }
 
 const TabContext = createContext<TabContextType | undefined>(undefined);
@@ -42,13 +45,37 @@ const DEFAULT_TAB: TabSheet = {
 };
 
 export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [tabSheet, setTabSheet] = useState<TabSheet>(() => loadTabFromLocal() || DEFAULT_TAB);
+  // Initialize from the last active project in LocalStorage or fall back to Default
+  const [tabSheet, setTabSheet] = useState<TabSheet>(DEFAULT_TAB);
   const [cursor, setCursor] = useState<CursorPosition>({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
 
+  /**
+   * PERSISTENCE: Saves current state using the updated ID-aware storage logic.
+   */
   const saveManual = useCallback(() => {
     saveTabToLocal(tabSheet);
-    console.log("STRATUM_LOG: Manual Save Executed.");
+    console.log("STRATUM_LOG: Project Persisted to Catalog.");
   }, [tabSheet]);
+
+  /**
+   * CATALOG: Wipes the current state and initializes a fresh UUID project.
+   */
+  const createNewProject = useCallback(() => {
+    localStorage.removeItem('stratum_active_id'); // Force storage to generate new ID on save
+    setTabSheet(DEFAULT_TAB);
+    setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+  }, []);
+
+  /**
+   * CATALOG: Swaps the entire TabSheet state with data from a specific ID.
+   */
+  const loadProject = useCallback((id: string) => {
+    const project = storage.loadProjectById(id);
+    if (project) {
+      setTabSheet(project);
+      setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 }); // Reset cursor for safety
+    }
+  }, []);
 
   const addRow = useCallback(() => {
     setTabSheet(prev => ({ ...prev, rows: [...prev.rows, createBlankRow()] }));
@@ -96,19 +123,34 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  /**
-   * Unified metadata update logic. Handles both string and numeric inputs.
-   */
   const updateMetadata = useCallback((field: keyof TabSheet, value: string | number) => {
-    setTabSheet(prev => ({
+  setTabSheet(prev => {
+    let finalValue = value;
+
+    // TACTICAL GUARD: BPM Sanitization
+    if (field === 'bpm') {
+      // Convert to string to strip leading zeros, then back to number
+      const sanitized = parseInt(value.toString().replace(/^0+/, ''));
+      
+      // If the field is empty or result is NaN (like when backspacing everything)
+      // we default to 1 to keep the engine alive, but the UI can show 0
+      finalValue = isNaN(sanitized) ? 0 : sanitized;
+
+      // Optional: Enforce a Maximum to prevent scheduling 1,000,000 notes
+      if (finalValue > 400) finalValue = 400;
+    }
+
+    return {
       ...prev,
-      [field]: value
-    }));
-  }, []);
+      [field]: finalValue
+    };
+  });
+}, []);
 
   return (
     <TabContext.Provider value={{ 
-      tabSheet, cursor, updateNote, setCursor, addRow, saveManual, updateTuning, updateMetadata
+      tabSheet, cursor, updateNote, setCursor, addRow, saveManual, 
+      updateTuning, updateMetadata, loadProject, createNewProject 
     }}>
       {children}
     </TabContext.Provider>

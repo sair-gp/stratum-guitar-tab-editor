@@ -50,6 +50,7 @@ export const Column = ({ column, rowIndex, colIndex }: ColumnProps) => {
             <input
               type="text"
               readOnly
+              data-editor-input="true"
               value={note}
               // METICULOUS: Ensure clicking a cell doesn't kill the Keyboard Engine focus
               onFocus={() => setCursor({ rowIndex, columnIndex: colIndex, stringIndex: stringIdx })}

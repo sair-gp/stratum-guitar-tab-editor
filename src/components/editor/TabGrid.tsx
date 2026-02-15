@@ -46,11 +46,17 @@ export const TabGrid = () => {
             <div className="flex items-center gap-2">
               <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">BPM</span>
               <input 
-                type="number"
-                value={tabSheet.bpm}
-                onChange={(e) => updateMetadata('bpm', parseInt(e.target.value) || 120)}
-                className="w-10 bg-transparent text-yellow-500 font-mono text-xs border-none outline-none focus:ring-0"
-              />
+    type="number"
+    value={tabSheet.bpm === 0 ? '' : tabSheet.bpm} // Allows user to clear field without seeing a '0'
+    onChange={(e) => updateMetadata('bpm', e.target.value)}
+    onBlur={() => {
+      // If user leaves field empty or at zero, reset to safe default
+      if (tabSheet.bpm < 40) updateMetadata('bpm', 120);
+    }}
+    className="w-12 bg-transparent text-yellow-500 font-mono text-xs border-none outline-none focus:ring-0"
+    min="40"
+    max="400"
+  />
             </div>
             <div className="h-4 w-[1px] bg-zinc-800"></div>
             <div className="flex items-center gap-2">
