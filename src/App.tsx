@@ -9,6 +9,7 @@ import { TabGrid } from './components/editor/TabGrid';
 import { SettingsSidebar } from './components/ui/SettingsSidebar';
 import { useState } from 'react';
 import { CommandPalette } from './components/ui/CommandPalette'; // NEW TACTICAL OVERLAY
+import { DemoVault } from './components/ui/DemoVault';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -41,6 +42,7 @@ function App() {
 
           {/* THE STEALTH SUITE */}
           <CommandPalette /> 
+          <DemoVault />
           
           <SettingsSidebar 
             isOpen={isSettingsOpen} 
