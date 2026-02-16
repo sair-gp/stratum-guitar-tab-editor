@@ -4,7 +4,7 @@
  */
 
 import * as Tone from 'tone';
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTab } from '../store/TabContext';
 
 export const useAudioEngine = () => {

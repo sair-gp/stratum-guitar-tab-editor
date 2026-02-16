@@ -89,14 +89,28 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newRows = [...prev.rows];
       const row = { ...newRows[cursor.rowIndex] };
       const cols = [...row.columns];
+      
+      // We extract just the notes to shift them
+      const notesToShift = cols.map(c => [...c.notes]);
+
       if (direction === 'right') {
-        cols.splice(cursor.columnIndex, 0, createBlankColumn());
-        cols.pop();
+        // TACTICAL: Insert empty notes at current position, pop the end
+        notesToShift.splice(cursor.columnIndex, 0, Array(6).fill(''));
+        notesToShift.pop();
       } else {
-        cols.splice(cursor.columnIndex, 1);
-        cols.push(createBlankColumn());
+        // TACTICAL: Remove notes at current position, push empty to end
+        // If we want to prevent "Accidental Deletion," we could check if notes are empty here.
+        notesToShift.splice(cursor.columnIndex, 1);
+        notesToShift.push(Array(6).fill(''));
       }
-      row.columns = cols;
+
+      // Re-assign notes back to the fixed Column containers
+      const updatedCols = cols.map((col, idx) => ({
+        ...col,
+        notes: notesToShift[idx]
+      }));
+
+      row.columns = updatedCols;
       newRows[cursor.rowIndex] = row;
       return { ...prev, rows: newRows };
     });
