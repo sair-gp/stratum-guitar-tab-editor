@@ -1,17 +1,18 @@
 /**
  * @file useKeyboardEngine.ts
- * @description Command Engine Upgraded: Undo/Redo, Time-Shifting, and Harmonic triggers.
+ * @description Command Engine: Direct integration of Alt+N (Staff) and Alt+E (Export).
  */
 
 import { useEffect } from 'react';
 import { useTab } from '../store/TabContext';
 import { useShortcuts } from '../store/ShortcutContext';
 import { useAudioEngine } from './useAudioEngine';
+import { triggerAsciiDownload } from '../utils/asciiExport'; // BAT-DIRECT LINK
 
 export const useKeyboardEngine = () => {
   const { 
     cursor, setCursor, updateNote, tabSheet, addRow, saveManual,
-    undo, redo, shiftNotes // NEW TACTICAL ACTIONS
+    undo, redo, shiftNotes 
   } = useTab();
   const { shortcuts } = useShortcuts();
   const { playNote, initAudio } = useAudioEngine();
@@ -27,33 +28,43 @@ export const useKeyboardEngine = () => {
       const key = e.key.toLowerCase();
 
       /**
-       * 0. ALT-COMMANDS: TIME-SHIFTING & TELEPORTATION
-       * Alt + Left/Right now triggers the Time-Shifter.
+       * 0. ALT-COMMANDS: STAFF NAVIGATION & SYSTEM ACTIONS
+       * Protected layer to avoid Browser default collisions.
        */
       if (e.altKey) {
-        e.preventDefault();
+        e.preventDefault(); // NIX BROWSER MENUS
+        
+        // JUMP STAVES
         if (key === 'arrowup' || key === 'arrowdown') {
           const direction = key === 'arrowdown' ? 1 : -1;
           const newRow = Math.max(0, Math.min(tabSheet.rows.length - 1, cursor.rowIndex + direction));
           setCursor({ ...cursor, rowIndex: newRow });
+          return;
         }
-        if (key === 'arrowright') shiftNotes('right');
-        if (key === 'arrowleft') shiftNotes('left');
+
+        // TIME-SHIFTING
+        if (key === 'arrowright') { shiftNotes('right'); return; }
+        if (key === 'arrowleft') { shiftNotes('left'); return; }
+
+        // TACTICAL SYSTEM ACTIONS
+        if (key === 'n') { addRow(); return; } // Alt + N = New Staff
+        if (key === 'e') { triggerAsciiDownload(tabSheet); return; } // Alt + E = Export
+        
         return;
       }
 
       /**
-       * 1. SYSTEM COMMANDS (CTRL/CMD aware)
+       * 1. SYSTEM COMMANDS (CTRL/CMD)
        */
       if (e.ctrlKey || e.metaKey) {
         if (key === 's') { e.preventDefault(); saveManual(); return; }
-        if (key === 'n') { e.preventDefault(); addRow(); return; }
+        // REMOVED Ctrl+N to prevent browser window popups
         if (key === 'z') { 
           e.preventDefault(); 
-          if (e.shiftKey) redo(); else undo(); // Support Ctrl+Shift+Z for redo
+          if (e.shiftKey) redo(); else undo();
           return; 
         }
-        if (key === 'y') { e.preventDefault(); redo(); return; } // Support Ctrl+Y for redo
+        if (key === 'y') { e.preventDefault(); redo(); return; }
       }
 
       // 2. ERASER
@@ -65,7 +76,6 @@ export const useKeyboardEngine = () => {
 
       // 3. SHORTCUTS & ARTICULATIONS
       const action = shortcuts[key];
-
       if (action?.startsWith('TOGGLE_')) {
         e.preventDefault();
         const tech = action.split('_')[1].toLowerCase();
@@ -114,10 +124,7 @@ export const useKeyboardEngine = () => {
         return;
       }
 
-      /**
-       * 7. ARTICULATION DIRECT INPUT
-       * Added '*' for Harmonics.
-       */
+      // 7. ARTICULATION DIRECT INPUT
       if (/^[hps\/~mx\*]$/i.test(key)) {
         e.preventDefault();
         updateNote(key);
@@ -134,5 +141,5 @@ export const useKeyboardEngine = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cursor, shortcuts, tabSheet.rows, updateNote, setCursor, addRow, saveManual, playNote, initAudio, undo, redo, shiftNotes]);
+  }, [cursor, shortcuts, tabSheet, updateNote, setCursor, addRow, saveManual, playNote, initAudio, undo, redo, shiftNotes]);
 };
