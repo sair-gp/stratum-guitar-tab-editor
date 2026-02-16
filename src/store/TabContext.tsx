@@ -1,6 +1,6 @@
 /**
  * @file TabContext.tsx
- * @description Master State Controller. Upgraded for Granular Column Metadata.
+ * @description Master State Controller. Exposing setTabSheet for strict type compliance.
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
@@ -9,6 +9,8 @@ import { saveTabToLocal, storage } from '../utils/storage';
 
 interface TabContextType {
   tabSheet: TabSheet;
+  // TACTICAL: Expose the standard React state setter for major structural swaps (Salvage)
+  setTabSheet: React.Dispatch<React.SetStateAction<TabSheet>>;
   cursor: CursorPosition;
   updateNote: (value: string) => void;
   setCursor: (pos: CursorPosition) => void;
@@ -16,7 +18,6 @@ interface TabContextType {
   saveManual: () => void;
   updateTuning: (stringIndex: number, newNote: string) => void;
   updateMetadata: (field: keyof TabSheet, value: string | number) => void;
-  // NO-NONSENSE: New granular metadata action
   updateColumnMetadata: (rowIndex: number, colIndex: number, field: 'bpm' | 'timeSignature', value: number | undefined) => void;
   loadProject: (id: string) => void;
   createNewProject: () => void;
@@ -67,10 +68,13 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  /**
-   * TACTICAL: Granular Column Update
-   * Allows us to set BPM or Meter on a specific beat.
-   */
+  const saveManual = useCallback(() => {
+    const savedId = saveTabToLocal(tabSheet);
+    if (!tabSheet.id) {
+      setTabSheet(prev => ({ ...prev, id: savedId }));
+    }
+  }, [tabSheet]);
+
   const updateColumnMetadata = useCallback((rowIndex: number, colIndex: number, field: 'bpm' | 'timeSignature', value: number | undefined) => {
     updateTabSheet(prev => {
       const newRows = [...prev.rows];
@@ -166,6 +170,7 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadDemo = useCallback(() => {
     const demo: TabSheet = {
       ...DEFAULT_TAB,
+      id: crypto.randomUUID(),
       title: "Stratum Demo Lick",
       artist: "Batman",
       rows: [{
@@ -205,13 +210,25 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateTabSheet(prev => ({ ...prev, config: { ...prev.config, showMeasureNumbers: !prev.config.showMeasureNumbers } }));
   }, [updateTabSheet]);
 
-  // GOATED MEMO: Prevents the 600ms lag by stabilizing the object reference
   const value = useMemo(() => ({ 
-    tabSheet, cursor, updateNote, setCursor, addRow, saveManual: () => saveTabToLocal(tabSheet), 
-    updateTuning, updateMetadata: (f: keyof TabSheet, v: string | number) => updateTabSheet(p => ({...p, [f]: v})), 
-    updateColumnMetadata, loadProject, createNewProject, toggleMeasureNumbers,
-    undo, redo, shiftNotes, loadDemo 
-  }), [tabSheet, cursor, updateNote, addRow, updateTuning, updateTabSheet, updateColumnMetadata, loadProject, createNewProject, toggleMeasureNumbers, undo, redo, shiftNotes, loadDemo]);
+    tabSheet, 
+    setTabSheet, // EXPOSED: Allows TabGrid to swap state during salvage
+    cursor, 
+    updateNote, 
+    setCursor, 
+    addRow, 
+    saveManual, 
+    updateTuning, 
+    updateMetadata: (f: keyof TabSheet, v: string | number) => updateTabSheet(p => ({...p, [f]: v})), 
+    updateColumnMetadata, 
+    loadProject, 
+    createNewProject, 
+    toggleMeasureNumbers,
+    undo, 
+    redo, 
+    shiftNotes, 
+    loadDemo 
+  }), [tabSheet, cursor, updateNote, addRow, saveManual, updateTuning, updateTabSheet, updateColumnMetadata, loadProject, createNewProject, toggleMeasureNumbers, undo, redo, shiftNotes, loadDemo]);
 
   return <TabContext.Provider value={value}>{children}</TabContext.Provider>;
 };

@@ -34,6 +34,7 @@ export interface TabRow {
  * The root data object for a guitar tab document.
  */
 export interface TabSheet {
+  id?: string;
   title: string;
   artist: string;
   tuning: string[]; 

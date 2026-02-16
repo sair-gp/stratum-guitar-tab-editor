@@ -1,6 +1,6 @@
 /**
  * @file storage.ts
- * @description Stabilized Project Management. Fixed ID collisions and export errors.
+ * @description Secure Persistence Engine. Prevents project overwriting via ID-Data coupling.
  */
 
 import type { TabSheet } from '../types/tab';
@@ -17,23 +17,27 @@ export interface ProjectMetadata {
 }
 
 /**
- * RESTORED EXPORT: Matches the existing TabContext expectations.
- * Includes a safety check to generate a new ID if one isn't active.
+ * TACTICAL: Save with Identity Verification
+ * - If data has an ID, we update that specific project.
+ * - If no ID exists, we create a new unique entry.
+ * @returns The ID used for saving (to be locked into state).
  */
-export const saveTabToLocal = (data: TabSheet): void => {
+export const saveTabToLocal = (data: TabSheet): string => {
   try {
-    let activeId = localStorage.getItem(CURRENT_PROJECT_ID_KEY);
+    // ANALYTIC: The ID must come from the data itself to prevent "Ghost Overwrites"
+    const activeId = data.id || crypto.randomUUID();
     
-    if (!activeId) {
-      activeId = crypto.randomUUID();
-      localStorage.setItem(CURRENT_PROJECT_ID_KEY, activeId);
-    }
+    // Lock this as the "Last Viewed" for the next refresh
+    localStorage.setItem(CURRENT_PROJECT_ID_KEY, activeId);
     
-    localStorage.setItem(`${PROJECT_PREFIX}${activeId}`, JSON.stringify(data));
+    // Save the full payload (now ensuring ID is included)
+    const payload = { ...data, id: activeId };
+    localStorage.setItem(`${PROJECT_PREFIX}${activeId}`, JSON.stringify(payload));
     
     // Sync Metadata with the Index
     const index: ProjectMetadata[] = JSON.parse(localStorage.getItem(CATALOG_INDEX_KEY) || '[]');
     const existingIdx = index.findIndex(p => p.id === activeId);
+    
     const metadata: ProjectMetadata = {
       id: activeId,
       title: data.title || "Untitled",
@@ -46,26 +50,25 @@ export const saveTabToLocal = (data: TabSheet): void => {
     } else {
       index.push(metadata);
     }
+    
     localStorage.setItem(CATALOG_INDEX_KEY, JSON.stringify(index));
+    
+    console.log(`STRATUM_VAULT: Project [${metadata.title}] secured.`);
+    return activeId;
 
   } catch (error) {
     console.error("SAVE_ERROR: Persistent storage failed.", error);
+    return data.id || "";
   }
-};
-
-/**
- * RESTORED EXPORT: Legacy support for initial load.
- */
-export const loadTabFromLocal = (): TabSheet | null => {
-  const activeId = localStorage.getItem(CURRENT_PROJECT_ID_KEY);
-  if (!activeId) return null;
-  const data = localStorage.getItem(`${PROJECT_PREFIX}${activeId}`);
-  return data ? JSON.parse(data) : null;
 };
 
 export const storage = {
   getIndex: (): ProjectMetadata[] => {
-    return JSON.parse(localStorage.getItem(CATALOG_INDEX_KEY) || '[]');
+    try {
+      return JSON.parse(localStorage.getItem(CATALOG_INDEX_KEY) || '[]');
+    } catch {
+      return [];
+    }
   },
 
   loadProjectById: (id: string): TabSheet | null => {

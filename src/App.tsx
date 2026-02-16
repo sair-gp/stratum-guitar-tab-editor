@@ -1,6 +1,6 @@
 /**
  * @file App.tsx
- * @description Fixed hierarchy to ensure hooks stay within provider bounds.
+ * @description Integrated Command Palette. HUD replaced with Stealth Discovery.
  */
 
 import { TabProvider } from './store/TabContext';
@@ -8,13 +8,10 @@ import { ShortcutProvider } from './store/ShortcutContext';
 import { TabGrid } from './components/editor/TabGrid';
 import { SettingsSidebar } from './components/ui/SettingsSidebar';
 import { useState } from 'react';
-import { ShortcutHUD } from './components/ui/ShorcutHUD';
+import { CommandPalette } from './components/ui/CommandPalette'; // NEW TACTICAL OVERLAY
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-  // NOTE: Do NOT call useAudioEngine or useTab here. 
-  // They belong in components rendered INSIDE the Providers below.
 
   return (
     <TabProvider>
@@ -30,7 +27,7 @@ function App() {
               <div className="flex gap-4">
                 <button 
                   onClick={() => setIsSettingsOpen(true)}
-                  className="px-4 py-2 bg-zinc-800/50 rounded border border-zinc-700/50 text-[10px] font-mono text-zinc-400 hover:text-yellow-500 transition-all"
+                  className="px-4 py-2 bg-zinc-800/50 rounded border border-zinc-800/50 text-[10px] font-mono text-zinc-400 hover:text-yellow-500 transition-all"
                 >
                   CONFIG_SHORTCUTS
                 </button>
@@ -42,7 +39,9 @@ function App() {
             <TabGrid />
           </main>
 
-          <ShortcutHUD />
+          {/* THE STEALTH SUITE */}
+          <CommandPalette /> 
+          
           <SettingsSidebar 
             isOpen={isSettingsOpen} 
             onClose={() => setIsSettingsOpen(false)} 
