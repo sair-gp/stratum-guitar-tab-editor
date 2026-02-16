@@ -1,6 +1,6 @@
 /**
  * @file usePlayback.ts
- * @description High-Performance Transport. Uses Windowed Scheduling to kill INP lag.
+ * @description Variable BPM Transport with Context-Aware Start & Global Shortcuts.
  */
 
 import * as Tone from 'tone';
@@ -12,9 +12,7 @@ export const usePlayback = () => {
   const { tabSheet, setCursor, cursor } = useTab();
   const { playNote, initAudio, resumeContext } = useAudioEngine();
   const [isPlaying, setIsPlaying] = useState(false);
-  
-  // TACTICAL: Use a single Sequence instead of thousands of individual events
-  const sequenceRef = useRef<Tone.Sequence | null>(null);
+  const sequenceRef = useRef<Tone.Part | null>(null);
 
   const stopPlayback = useCallback(() => {
     Tone.Transport.stop();
@@ -26,8 +24,11 @@ export const usePlayback = () => {
     setIsPlaying(false);
   }, []);
 
-  const startPlayback = useCallback(() => {
-    // 1. SYNC HANDSHAKE: Zero-latency hardware wake-up
+  /**
+   * BAT-START: Context-Aware Playback
+   * @param fromBeginning If true, ignores cursor and starts at Row 0, Col 0.
+   */
+  const startPlayback = useCallback((fromBeginning = false) => {
     resumeContext();
 
     if (Tone.Transport.state === 'started') {
@@ -36,53 +37,90 @@ export const usePlayback = () => {
     }
 
     const execute = async () => {
-      // 2. BUFFER CHECK
       await initAudio();
       await Tone.loaded();
-
       setIsPlaying(true);
-      Tone.Transport.bpm.value = tabSheet.bpm;
 
-      // 3. ANALYTIC WINDOWING: Flatten columns for the sequence
-      const allCols = tabSheet.rows.flatMap((row, rIdx) => 
-        row.columns.map(col => ({ ...col, rIdx }))
-      );
+      const events: { time: number; col: any; rIdx: number; cIdx: number }[] = [];
+      let accumulatedTime = 0;
+      let currentRunningBpm = tabSheet.bpm;
 
-      const startIndex = (cursor.rowIndex * 32) + cursor.columnIndex;
-      const playbackSlice = allCols.slice(startIndex);
+      // 1. TACTICAL TIMELINE MAPPING
+      tabSheet.rows.forEach((row, rIdx) => {
+        row.columns.forEach((col, cIdx) => {
+          if (col.bpm) currentRunningBpm = col.bpm;
 
-      // 4. THE SEQUENCE: Only schedules the NEXT note in the buffer
-      sequenceRef.current = new Tone.Sequence(
-        (time, colData) => {
-          // Identify global position for UI sync
-          const globalIdx = allCols.indexOf(colData);
-          const rIdx = Math.floor(globalIdx / 32);
-          const cIdx = globalIdx % 32;
+          const secondsPerBeat = 60 / currentRunningBpm;
+          const secondsPerColumn = secondsPerBeat / 4; 
 
-          Tone.Draw.schedule(() => {
-            setCursor({ rowIndex: rIdx, columnIndex: cIdx, stringIndex: 0 });
-          }, time);
+          events.push({ time: accumulatedTime, col, rIdx, cIdx });
+          accumulatedTime += secondsPerColumn;
+        });
+      });
 
-          // Trigger notes for this column
-          colData.notes.forEach((fret, sIdx) => {
-            if (fret !== "" && fret !== "-") {
-              playNote(sIdx, fret, time);
-            }
-          });
-        },
-        playbackSlice,
-        "16n" // Tactical resolution: 16th notes
-      );
+      // 2. CALCULATE ENTRY POINT
+      // If fromBeginning is true, index is 0. Otherwise, calculate based on cursor.
+      const startGlobalIdx = fromBeginning ? 0 : (cursor.rowIndex * 32) + cursor.columnIndex;
+      
+      if (!events[startGlobalIdx]) {
+        setIsPlaying(false);
+        return;
+      }
 
-      // 5. START: Small offset to prevent first-note jitter
-      sequenceRef.current.start(0);
+      const startTimeOffset = events[startGlobalIdx].time;
+      const playbackEvents = events.slice(startGlobalIdx).map(e => ({
+        ...e,
+        time: e.time - startTimeOffset 
+      }));
+
+      // 3. SCHEDULING
+      sequenceRef.current = new Tone.Part((time, event) => {
+        Tone.Draw.schedule(() => {
+          setCursor({ rowIndex: event.rIdx, columnIndex: event.cIdx, stringIndex: 0 });
+        }, time);
+
+        event.col.notes.forEach((fret: string, sIdx: number) => {
+          if (fret !== "" && fret !== "-") {
+            playNote(sIdx, fret, time);
+          }
+        });
+      }, playbackEvents).start(0);
+
       Tone.Transport.start("+0.1");
     };
 
     execute();
   }, [tabSheet, cursor, initAudio, resumeContext, playNote, setCursor, stopPlayback]);
 
-  // Clean up on unmount
+  /**
+   * BAT-SHORTCUTS: Spacebar & Shift+Spacebar
+   * - Space: Play/Stop from cursor.
+   * - Shift + Space: Play/Stop from start.
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        const active = document.activeElement;
+        // METICULOUS SHIELD: Don't trigger if user is typing in Title/Artist inputs
+        const isEditingTab = active?.getAttribute('data-editor-input') === 'true' || active === document.body;
+
+        if (isEditingTab) {
+          e.preventDefault(); // Stop page scrolling
+          
+          if (Tone.Transport.state === 'started') {
+            stopPlayback();
+          } else {
+            // Shift + Space triggers the fromBeginning flag
+            startPlayback(e.shiftKey);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [startPlayback, stopPlayback]);
+
   useEffect(() => {
     return () => stopPlayback();
   }, [stopPlayback]);

@@ -1,23 +1,23 @@
 /**
  * @file TabContext.tsx
- * @description Master State Controller. Fixed Project Loading & Pro-Demo Injection.
+ * @description Master State Controller. Upgraded for Granular Column Metadata.
  */
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import type { TabSheet, TabRow, TabColumn, CursorPosition } from '../types/tab';
 import { saveTabToLocal, storage } from '../utils/storage';
 
 interface TabContextType {
   tabSheet: TabSheet;
   cursor: CursorPosition;
-  isAudioReady: boolean;
-  setIsAudioReady: (ready: boolean) => void;
   updateNote: (value: string) => void;
   setCursor: (pos: CursorPosition) => void;
   addRow: () => void;
   saveManual: () => void;
   updateTuning: (stringIndex: number, newNote: string) => void;
   updateMetadata: (field: keyof TabSheet, value: string | number) => void;
+  // NO-NONSENSE: New granular metadata action
+  updateColumnMetadata: (rowIndex: number, colIndex: number, field: 'bpm' | 'timeSignature', value: number | undefined) => void;
   loadProject: (id: string) => void;
   createNewProject: () => void;
   toggleMeasureNumbers: () => void;
@@ -53,8 +53,6 @@ const DEFAULT_TAB: TabSheet = {
 export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [tabSheet, setTabSheet] = useState<TabSheet>(DEFAULT_TAB);
   const [cursor, setCursor] = useState<CursorPosition>({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
-  const [isAudioReady, setIsAudioReady] = useState(false);
-  
   const [history, setHistory] = useState<TabSheet[]>([]);
   const [future, setFuture] = useState<TabSheet[]>([]);
 
@@ -68,6 +66,20 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return next;
     });
   }, []);
+
+  /**
+   * TACTICAL: Granular Column Update
+   * Allows us to set BPM or Meter on a specific beat.
+   */
+  const updateColumnMetadata = useCallback((rowIndex: number, colIndex: number, field: 'bpm' | 'timeSignature', value: number | undefined) => {
+    updateTabSheet(prev => {
+      const newRows = [...prev.rows];
+      const newCols = [...newRows[rowIndex].columns];
+      newCols[colIndex] = { ...newCols[colIndex], [field]: value };
+      newRows[rowIndex] = { ...newRows[rowIndex], columns: newCols };
+      return { ...prev, rows: newRows };
+    });
+  }, [updateTabSheet]);
 
   const undo = useCallback(() => {
     if (history.length === 0) return;
@@ -90,22 +102,14 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newRows = [...prev.rows];
       const row = { ...newRows[cursor.rowIndex] };
       const cols = [...row.columns];
-      const notesToShift = cols.map(c => [...c.notes]);
-
       if (direction === 'right') {
-        notesToShift.splice(cursor.columnIndex, 0, Array(6).fill(''));
-        notesToShift.pop();
+        cols.splice(cursor.columnIndex, 0, createBlankColumn());
+        cols.pop();
       } else {
-        notesToShift.splice(cursor.columnIndex, 1);
-        notesToShift.push(Array(6).fill(''));
+        cols.splice(cursor.columnIndex, 1);
+        cols.push(createBlankColumn());
       }
-
-      const updatedCols = cols.map((col, idx) => ({
-        ...col,
-        notes: notesToShift[idx]
-      }));
-
-      row.columns = updatedCols;
+      row.columns = cols;
       newRows[cursor.rowIndex] = row;
       return { ...prev, rows: newRows };
     });
@@ -113,53 +117,39 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateNote = useCallback((value: string) => {
     updateTabSheet(prev => {
-      const currentVal = prev.rows[cursor.rowIndex].columns[cursor.columnIndex].notes[cursor.stringIndex];
+      const { rowIndex, columnIndex, stringIndex } = cursor;
+      const currentVal = prev.rows[rowIndex].columns[columnIndex].notes[stringIndex];
       let finalValue = value;
-      const techSymbols = ['h', 'p', '/', '~', 'm', 'x', 'v', 's', '*'];
+      const techSymbols = ['h', 'p', '/', '~', 'm', 'x', 'v', 's'];
       const isTechnique = techSymbols.includes(value.toLowerCase());
 
       if (isTechnique) {
-        let techToApply = value.toLowerCase();
-        if (techToApply === 'v') techToApply = '~';
-        if (techToApply === 's') techToApply = '/';
-        if (currentVal === "" && techToApply !== 'x' && techToApply !== '*') return prev;
-        
-        if (currentVal.endsWith(techToApply)) {
-          finalValue = currentVal.slice(0, -1);
-        } else {
-          finalValue = currentVal + techToApply;
-        }
+        let tech = value.toLowerCase() === 'v' ? '~' : (value.toLowerCase() === 's' ? '/' : value.toLowerCase());
+        if (currentVal === "" && tech !== 'x') return prev;
+        finalValue = currentVal.endsWith(tech) ? currentVal.slice(0, -1) : currentVal + tech;
       } else if (value !== "" && !isNaN(parseInt(value))) {
         const lastChar = currentVal.slice(-1);
-        const endsWithTech = techSymbols.includes(lastChar.toLowerCase());
-        if (endsWithTech) {
+        if (techSymbols.includes(lastChar.toLowerCase())) {
           finalValue = currentVal + value;
         } else {
-          const matches = currentVal.match(/\d+$/);
-          const currentDigits = matches ? matches[0] : "";
-          if (currentDigits.length === 1 && currentDigits !== "") {
-            const combined = currentDigits + value;
-            if (parseInt(combined) <= 24) {
-              finalValue = currentVal.slice(0, -currentDigits.length) + combined;
-            } else {
-              finalValue = value;
-            }
-          } else {
-            finalValue = value;
-          }
+          const digits = currentVal.match(/\d+$/)?.[0] || "";
+          if (digits.length === 1 && digits !== "") {
+            const combined = digits + value;
+            finalValue = parseInt(combined) <= 24 ? currentVal.slice(0, -1) + combined : value;
+          } else finalValue = value;
         }
       }
 
       const newRows = [...prev.rows];
-      const targetRow = { ...newRows[cursor.rowIndex] };
+      const targetRow = { ...newRows[rowIndex] };
       const newCols = [...targetRow.columns];
-      const targetCol = { ...newCols[cursor.columnIndex] };
+      const targetCol = { ...newCols[columnIndex] };
       const newNotes = [...targetCol.notes];
-      newNotes[cursor.stringIndex] = finalValue;
+      newNotes[stringIndex] = finalValue;
       targetCol.notes = newNotes;
-      newCols[cursor.columnIndex] = targetCol;
+      newCols[columnIndex] = targetCol;
       targetRow.columns = newCols;
-      newRows[cursor.rowIndex] = targetRow;
+      newRows[rowIndex] = targetRow;
       return { ...prev, rows: newRows };
     });
   }, [cursor, updateTabSheet]);
@@ -167,65 +157,42 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateTuning = useCallback((stringIdx: number, newNote: string) => {
     updateTabSheet(prev => {
       const newTuning = [...prev.tuning];
-      const currentPitch = newTuning[stringIdx];
-      const octaveMatch = currentPitch.match(/\d+$/);
-      const hasNewOctave = /\d+$/.test(newNote);
-      const finalNote = hasNewOctave ? newNote.toUpperCase() : `${newNote.toUpperCase()}${octaveMatch ? octaveMatch[0] : '3'}`;
-      newTuning[stringIdx] = finalNote;
+      const oct = newTuning[stringIdx].match(/\d+$/)?.[0] || '3';
+      newTuning[stringIdx] = /\d+$/.test(newNote) ? newNote.toUpperCase() : `${newNote.toUpperCase()}${oct}`;
       return { ...prev, tuning: newTuning };
     });
   }, [updateTabSheet]);
 
-  /**
-   * RECRUITER-PROOF DEMO:
-   * A technical showcase of the engine's capabilities.
-   */
   const loadDemo = useCallback(() => {
     const demo: TabSheet = {
       ...DEFAULT_TAB,
       title: "Stratum Demo Lick",
-      artist: "Polyphia Style",
-      bpm: 110,
-      rows: [
-        {
-          id: crypto.randomUUID(),
-          columns: Array(32).fill(null).map((_, i) => {
-            const col = createBlankColumn();
-            // A technical sequences with legato and harmonics
-            if (i === 0) col.notes[5] = "0";
-            if (i === 2) col.notes[5] = "3p0"; 
-            if (i === 4) col.notes[4] = "0";
-            if (i === 6) col.notes[4] = "2h4"; 
-            if (i === 8) col.notes[3] = "0";
-            if (i === 10) col.notes[3] = "2*";  // Harmonic
-            if (i === 12) col.notes[2] = "0";
-            if (i === 14) col.notes[2] = "4/6"; // Slide
-            if (i === 16) col.notes[1] = "5~";   // Vibrato
-            return col;
-          })
-        }
-      ]
+      artist: "Batman",
+      rows: [{
+        id: crypto.randomUUID(),
+        columns: Array(32).fill(null).map((_, i) => {
+          const col = createBlankColumn();
+          if (i === 0) col.notes[5] = "0";
+          if (i === 1) col.notes[5] = "3";
+          if (i === 2) col.notes[4] = "0";
+          if (i === 3) col.notes[4] = "2";
+          return col;
+        })
+      }]
     };
     updateTabSheet(demo);
-    setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
-    console.log("STRATUM_LOG: Demo Loaded.");
   }, [updateTabSheet]);
 
   const loadProject = useCallback((id: string) => {
     const project = storage.loadProjectById(id);
     if (project) {
-      // TACTICAL: Reset history stacks when loading a new project
-      setHistory([]);
-      setFuture([]);
-      updateTabSheet(project, false); 
+      updateTabSheet(project, false);
       setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
     }
   }, [updateTabSheet]);
 
   const createNewProject = useCallback(() => {
     localStorage.removeItem('stratum_active_id'); 
-    setHistory([]);
-    setFuture([]);
     updateTabSheet(DEFAULT_TAB);
     setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
   }, [updateTabSheet]);
@@ -235,22 +202,18 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [updateTabSheet]);
 
   const toggleMeasureNumbers = useCallback(() => {
-    updateTabSheet(prev => ({
-      ...prev,
-      config: { ...prev.config, showMeasureNumbers: !prev.config.showMeasureNumbers }
-    }));
+    updateTabSheet(prev => ({ ...prev, config: { ...prev.config, showMeasureNumbers: !prev.config.showMeasureNumbers } }));
   }, [updateTabSheet]);
 
-  return (
-    <TabContext.Provider value={{ 
-      tabSheet, cursor, isAudioReady, setIsAudioReady, updateNote, setCursor, addRow, saveManual: () => saveTabToLocal(tabSheet), 
-      updateTuning, updateMetadata: (f, v) => updateTabSheet(p => ({...p, [f]: v})), 
-      loadProject, createNewProject, toggleMeasureNumbers,
-      undo, redo, shiftNotes, loadDemo
-    }}>
-      {children}
-    </TabContext.Provider>
-  );
+  // GOATED MEMO: Prevents the 600ms lag by stabilizing the object reference
+  const value = useMemo(() => ({ 
+    tabSheet, cursor, updateNote, setCursor, addRow, saveManual: () => saveTabToLocal(tabSheet), 
+    updateTuning, updateMetadata: (f: keyof TabSheet, v: string | number) => updateTabSheet(p => ({...p, [f]: v})), 
+    updateColumnMetadata, loadProject, createNewProject, toggleMeasureNumbers,
+    undo, redo, shiftNotes, loadDemo 
+  }), [tabSheet, cursor, updateNote, addRow, updateTuning, updateTabSheet, updateColumnMetadata, loadProject, createNewProject, toggleMeasureNumbers, undo, redo, shiftNotes, loadDemo]);
+
+  return <TabContext.Provider value={value}>{children}</TabContext.Provider>;
 };
 
 export const useTab = () => {

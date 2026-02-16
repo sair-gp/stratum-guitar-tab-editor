@@ -1,6 +1,6 @@
 /**
  * @file useAudioEngine.ts
- * @description State-Resilient Audio Engine. Forced Firefox compatibility via Ref-based ready-checks.
+ * @description Zero-Dependency Audio Engine. Manages internal readiness.
  */
 
 import * as Tone from 'tone';
@@ -8,10 +8,10 @@ import { useCallback, useRef } from 'react';
 import { useTab } from '../store/TabContext';
 
 export const useAudioEngine = () => {
-  const { tabSheet, setIsAudioReady } = useTab();
+  // NO-NONSENSE: We only need tabSheet for the tuning. 
+  const { tabSheet } = useTab();
   
   const isInitializing = useRef(false);
-  // TACTICAL: Use a Ref for the ready state to bypass React's closure staleness
   const audioReadyRef = useRef(false);
   
   const sampler = useRef<Tone.Sampler | null>(null);
@@ -21,7 +21,6 @@ export const useAudioEngine = () => {
   const resumeContext = useCallback(() => {
     if (Tone.context.state !== 'running') {
       Tone.start();
-      console.log("STRATUM_AUDIO: Sync hardware wake-up.");
     }
   }, []);
 
@@ -31,7 +30,8 @@ export const useAudioEngine = () => {
 
     isInitializing.current = true;
 
-    const highPass = new Tone.Filter(20, "highpass").toDestination();
+    // TACTICAL: Clean signal chain for maximum transparency
+    const highPass = new Tone.Filter(80, "highpass").toDestination();
     const vib = new Tone.Vibrato(5, 0.1).connect(highPass);
     
     filter.current = highPass;
@@ -47,18 +47,16 @@ export const useAudioEngine = () => {
         },
         baseUrl: "https://nbrosowsky.github.io/tonejs-instruments/samples/guitar-acoustic/",
         onload: () => {
-          console.log("STRATUM_AUDIO: Buffers full.");
-          audioReadyRef.current = true; // Update Ref immediately
-          setIsAudioReady(true);        // Update Context for UI
+          console.log("STRATUM_AUDIO: Buffers loaded.");
+          audioReadyRef.current = true;
           isInitializing.current = false;
           resolve(true);
         }
       }).connect(vib);
     });
-  }, [setIsAudioReady]);
+  }, []); // Removed Context dependency
 
   const playNote = useCallback((stringIndex: number, fret: string, time?: number) => {
-    // NO-NONSENSE: Check the Ref, not the state, to avoid closure issues
     if (!sampler.current || !audioReadyRef.current || fret === "") return;
 
     const baseNote = tabSheet.tuning[stringIndex];
@@ -66,7 +64,7 @@ export const useAudioEngine = () => {
     const triggerTime = time || Tone.now();
     
     if (lowerFret.includes('x')) {
-      sampler.current.triggerAttackRelease("E1", "32n", triggerTime, 0.3);
+      sampler.current.triggerAttackRelease("E1", "32n", triggerTime, 0.2);
       return;
     }
 
@@ -76,38 +74,41 @@ export const useAudioEngine = () => {
     const isHarmonic = lowerFret.includes('*');
     const isMuted = lowerFret.includes('m');
 
-    const triggerNote = (fretVal: string, delay = 0, vel = 0.7) => {
+    const triggerNote = (fretVal: string, delay = 0, isLegatoChild = false) => {
       const fretNum = parseInt(fretVal);
       if (isNaN(fretNum)) return;
 
       let freq = Tone.Frequency(baseNote).transpose(fretNum);
+      const executeTime = triggerTime + delay;
       
       if (isHarmonic) {
         freq = freq.transpose(12);
-        filter.current?.frequency.setValueAtTime(2500, triggerTime + delay);
+        filter.current?.frequency.setValueAtTime(3200, executeTime);
+        filter.current?.Q.setValueAtTime(2, executeTime);
       } else {
-        filter.current?.frequency.setValueAtTime(20, triggerTime + delay);
+        filter.current?.frequency.setValueAtTime(80, executeTime);
+        filter.current?.Q.setValueAtTime(1, executeTime);
       }
 
       const pitch = freq.toNote();
-      const duration = isMuted ? "64n" : "2n";
-      const finalVel = isMuted ? 0.3 : vel;
+      const duration = isMuted ? "32n" : "1n";
+      const velocity = isMuted ? 0.2 : (isLegatoChild ? 0.45 : 0.75);
 
-      sampler.current?.triggerAttackRelease(pitch, duration, triggerTime + delay, finalVel);
+      sampler.current?.triggerAttackRelease(pitch, duration, executeTime, velocity);
     };
 
     triggerNote(noteSequence[0]);
 
     if (noteSequence.length > 1) {
       const legatoDelay = Tone.Time("16n").toSeconds();
-      triggerNote(noteSequence[1], legatoDelay, 0.5);
+      triggerNote(noteSequence[1], legatoDelay, true);
     }
 
     if (lowerFret.includes('~')) {
-      vibrato.current?.depth.setValueAtTime(0.5, triggerTime);
-      vibrato.current?.depth.linearRampToValueAtTime(0, triggerTime + 0.8);
+      vibrato.current?.depth.setValueAtTime(0.6, triggerTime + 0.1);
+      vibrato.current?.depth.linearRampToValueAtTime(0, triggerTime + 1.2);
     }
-  }, [tabSheet.tuning]); // Removed isAudioReady from deps
+  }, [tabSheet.tuning]);
 
   return { initAudio, resumeContext, playNote, isAudioReady: audioReadyRef.current };
 };

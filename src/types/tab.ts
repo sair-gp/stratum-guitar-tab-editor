@@ -17,6 +17,8 @@ export type FretValue = string;
 export interface TabColumn {
   id: string; // Unique UUID for React reconciliation
   notes: FretValue[];
+  bpm?: number;
+  timeSignature?: number;
 }
 
 /**
