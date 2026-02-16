@@ -1,6 +1,6 @@
 /**
  * @file useKeyboardEngine.ts
- * @description Streamlined for Legato Sequence entry (e.g., 3p0).
+ * @description Command Engine Upgraded: Undo/Redo, Time-Shifting, and Harmonic triggers.
  */
 
 import { useEffect } from 'react';
@@ -9,7 +9,10 @@ import { useShortcuts } from '../store/ShortcutContext';
 import { useAudioEngine } from './useAudioEngine';
 
 export const useKeyboardEngine = () => {
-  const { cursor, setCursor, updateNote, tabSheet, addRow, saveManual } = useTab();
+  const { 
+    cursor, setCursor, updateNote, tabSheet, addRow, saveManual,
+    undo, redo, shiftNotes // NEW TACTICAL ACTIONS
+  } = useTab();
   const { shortcuts } = useShortcuts();
   const { playNote, initAudio } = useAudioEngine();
 
@@ -23,19 +26,34 @@ export const useKeyboardEngine = () => {
 
       const key = e.key.toLowerCase();
 
-      // 0. ALT-COMMANDS: STAFF TELEPORTATION
-      if (e.altKey && (key === 'arrowup' || key === 'arrowdown')) {
+      /**
+       * 0. ALT-COMMANDS: TIME-SHIFTING & TELEPORTATION
+       * Alt + Left/Right now triggers the Time-Shifter.
+       */
+      if (e.altKey) {
         e.preventDefault();
-        const direction = key === 'arrowdown' ? 1 : -1;
-        const newRow = Math.max(0, Math.min(tabSheet.rows.length - 1, cursor.rowIndex + direction));
-        setCursor({ ...cursor, rowIndex: newRow });
+        if (key === 'arrowup' || key === 'arrowdown') {
+          const direction = key === 'arrowdown' ? 1 : -1;
+          const newRow = Math.max(0, Math.min(tabSheet.rows.length - 1, cursor.rowIndex + direction));
+          setCursor({ ...cursor, rowIndex: newRow });
+        }
+        if (key === 'arrowright') shiftNotes('right');
+        if (key === 'arrowleft') shiftNotes('left');
         return;
       }
 
-      // 1. SYSTEM COMMANDS
-      if (e.ctrlKey) {
+      /**
+       * 1. SYSTEM COMMANDS (CTRL/CMD aware)
+       */
+      if (e.ctrlKey || e.metaKey) {
         if (key === 's') { e.preventDefault(); saveManual(); return; }
         if (key === 'n') { e.preventDefault(); addRow(); return; }
+        if (key === 'z') { 
+          e.preventDefault(); 
+          if (e.shiftKey) redo(); else undo(); // Support Ctrl+Shift+Z for redo
+          return; 
+        }
+        if (key === 'y') { e.preventDefault(); redo(); return; } // Support Ctrl+Y for redo
       }
 
       // 2. ERASER
@@ -96,18 +114,17 @@ export const useKeyboardEngine = () => {
         return;
       }
 
-      // 7. DIRECT TECHNIQUE FALLBACK
-      if (/^[hps\/~mx]$/i.test(key)) {
+      /**
+       * 7. ARTICULATION DIRECT INPUT
+       * Added '*' for Harmonics.
+       */
+      if (/^[hps\/~mx\*]$/i.test(key)) {
         e.preventDefault();
         updateNote(key);
         return;
       }
 
-      /**
-       * 8. FRET DATA ENTRY: NO-NONSENSE
-       * We pass the key directly to updateNote and let the Context's 
-       * new Legato Sequence Logic handle the building.
-       */
+      // 8. FRET DATA ENTRY
       if (/^[0-9]$/.test(key)) {
         e.preventDefault();
         initAudio(); 
@@ -117,5 +134,5 @@ export const useKeyboardEngine = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cursor, shortcuts, tabSheet.rows, updateNote, setCursor, addRow, saveManual, playNote, initAudio]);
+  }, [cursor, shortcuts, tabSheet.rows, updateNote, setCursor, addRow, saveManual, playNote, initAudio, undo, redo, shiftNotes]);
 };

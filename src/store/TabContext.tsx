@@ -1,6 +1,6 @@
 /**
  * @file TabContext.tsx
- * @description Secure Project Lifecycle Management. Fixed ID-Leakage during new project creation.
+ * @description Master State Controller. Fixed Interface/Value mismatch.
  */
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
@@ -19,6 +19,11 @@ interface TabContextType {
   loadProject: (id: string) => void;
   createNewProject: () => void;
   toggleMeasureNumbers: () => void;
+  // NO-NONSENSE NEW ACTIONS
+  undo: () => void;
+  redo: () => void;
+  shiftNotes: (direction: 'left' | 'right') => void;
+  loadDemo: () => void;
 }
 
 const TabContext = createContext<TabContextType | undefined>(undefined);
@@ -34,35 +39,6 @@ const createBlankRow = (): TabRow => ({
   columns: Array(FIXED_COLS).fill(null).map(createBlankColumn),
 });
 
-const migrateTabSheet = (data: TabSheet): TabSheet => {
-  const isOldLayout = data.rows.length > 0 && data.rows[0].columns.length === 16;
-  if (!isOldLayout) {
-    const config = data.config || { showMeasureNumbers: false };
-    return { ...data, config };
-  }
-
-  const newRows: TabRow[] = [];
-  const oldRows = data.rows;
-
-  for (let i = 0; i < oldRows.length; i += 2) {
-    const firstHalf = oldRows[i].columns;
-    const secondHalf = oldRows[i + 1] 
-      ? oldRows[i + 1].columns 
-      : Array(16).fill(null).map(createBlankColumn);
-
-    newRows.push({
-      id: crypto.randomUUID(),
-      columns: [...firstHalf, ...secondHalf]
-    });
-  }
-
-  return {
-    ...data,
-    rows: newRows,
-    config: data.config || { showMeasureNumbers: false }
-  };
-};
-
 const DEFAULT_TAB: TabSheet = {
   title: "New Tab",
   artist: "Unknown Artist",
@@ -70,55 +46,66 @@ const DEFAULT_TAB: TabSheet = {
   rows: [createBlankRow()],
   bpm: 120,          
   timeSignature: 4,
-  config: {
-    showMeasureNumbers: false
-  }
+  config: { showMeasureNumbers: false }
 };
 
 export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [tabSheet, setTabSheet] = useState<TabSheet>(DEFAULT_TAB);
   const [cursor, setCursor] = useState<CursorPosition>({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+  
+  // METICULOUS HISTORY STACKS
+  const [history, setHistory] = useState<TabSheet[]>([]);
+  const [future, setFuture] = useState<TabSheet[]>([]);
 
-  const saveManual = useCallback(() => {
-    saveTabToLocal(tabSheet);
-  }, [tabSheet]);
-
-  const toggleMeasureNumbers = useCallback(() => {
-    setTabSheet(prev => ({
-      ...prev,
-      config: { ...prev.config, showMeasureNumbers: !prev.config.showMeasureNumbers }
-    }));
+  const updateTabSheet = useCallback((newSheet: TabSheet | ((prev: TabSheet) => TabSheet), track = true) => {
+    setTabSheet(prev => {
+      const next = typeof newSheet === 'function' ? newSheet(prev) : newSheet;
+      if (track) {
+        setHistory(h => [...h, prev].slice(-50));
+        setFuture([]);
+      }
+      return next;
+    });
   }, []);
 
-  /**
-   * NO-NONSENSE PROJECT RESET:
-   * Explicitly clears the active project ID to force a fresh save.
-   */
-  const createNewProject = useCallback(() => {
-    // TACTICAL: Clear the session ID before resetting state
-    localStorage.removeItem('stratum_active_id'); 
-    setTabSheet(DEFAULT_TAB);
-    setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
-    console.log("STRATUM_LOG: Workspace Cleared. Next save will create a new entry.");
-  }, []);
+  const undo = useCallback(() => {
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setFuture(f => [tabSheet, ...f]);
+    setHistory(h => h.slice(0, -1));
+    setTabSheet(prev);
+  }, [history, tabSheet]);
 
-  const loadProject = useCallback((id: string) => {
-    const project = storage.loadProjectById(id);
-    if (project) {
-      setTabSheet(migrateTabSheet(project));
-      setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
-    }
-  }, []);
+  const redo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[0];
+    setHistory(h => [...h, tabSheet]);
+    setFuture(f => f.slice(1));
+    setTabSheet(next);
+  }, [future, tabSheet]);
 
-  const addRow = useCallback(() => {
-    setTabSheet(prev => ({ ...prev, rows: [...prev.rows, createBlankRow()] }));
-  }, []);
+  const shiftNotes = useCallback((direction: 'left' | 'right') => {
+    updateTabSheet(prev => {
+      const newRows = [...prev.rows];
+      const row = { ...newRows[cursor.rowIndex] };
+      const cols = [...row.columns];
+      if (direction === 'right') {
+        cols.splice(cursor.columnIndex, 0, createBlankColumn());
+        cols.pop();
+      } else {
+        cols.splice(cursor.columnIndex, 1);
+        cols.push(createBlankColumn());
+      }
+      row.columns = cols;
+      newRows[cursor.rowIndex] = row;
+      return { ...prev, rows: newRows };
+    });
+  }, [cursor, updateTabSheet]);
 
   const updateNote = useCallback((value: string) => {
-    setTabSheet(prev => {
+    updateTabSheet(prev => {
       const currentVal = prev.rows[cursor.rowIndex].columns[cursor.columnIndex].notes[cursor.stringIndex];
       let finalValue = value;
-
       const techSymbols = ['h', 'p', '/', '~', 'm', 'x', 'v', 's'];
       const isTechnique = techSymbols.includes(value.toLowerCase());
 
@@ -126,45 +113,29 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let techToApply = value.toLowerCase();
         if (techToApply === 'v') techToApply = '~';
         if (techToApply === 's') techToApply = '/';
-
-        // TACTICAL GUARD: Techniques usually need a preceding note.
         if (currentVal === "" && techToApply !== 'x') return prev;
-
-        // TOGGLE LOGIC: If the cell ends with this exact tech, remove it.
         if (currentVal.endsWith(techToApply)) {
           finalValue = currentVal.slice(0, -1);
         } else {
-          // NO-NONSENSE: Append the tech to the current sequence (e.g., "3" -> "3p")
           finalValue = currentVal + techToApply;
         }
       } else if (value !== "" && !isNaN(parseInt(value))) {
-        /**
-         * LEGATO SEQUENCE LOGIC:
-         * 1. If the current value ends with a technique (e.g., "3p"), 
-         * we append the new digit to start the next note (e.g., "3p0").
-         * 2. If it's just a number, we use existing multi-digit logic (e.g., "1" -> "12").
-         */
         const lastChar = currentVal.slice(-1);
         const endsWithTech = techSymbols.includes(lastChar.toLowerCase());
-
         if (endsWithTech) {
-          // APPEND: Start of the second note in the legato chain
           finalValue = currentVal + value;
         } else {
-          // STANDARD: Multi-digit fret logic for the current note
-          // We find the last "block" of numbers and see if we can append
           const matches = currentVal.match(/\d+$/);
           const currentDigits = matches ? matches[0] : "";
-          
           if (currentDigits.length === 1 && currentDigits !== "") {
             const combined = currentDigits + value;
             if (parseInt(combined) <= 24) {
               finalValue = currentVal.slice(0, -currentDigits.length) + combined;
             } else {
-              finalValue = value; // Reset if over 24
+              finalValue = value;
             }
           } else {
-            finalValue = value; // Default to new number if block is full or empty
+            finalValue = value;
           }
         }
       }
@@ -181,33 +152,73 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       newRows[cursor.rowIndex] = targetRow;
       return { ...prev, rows: newRows };
     });
-  }, [cursor]);
+  }, [cursor, updateTabSheet]);
 
   const updateTuning = useCallback((stringIdx: number, newNote: string) => {
-    setTabSheet(prev => {
+    updateTabSheet(prev => {
       const newTuning = [...prev.tuning];
-      newTuning[stringIdx] = newNote.toUpperCase();
+      const currentPitch = newTuning[stringIdx];
+      const octaveMatch = currentPitch.match(/\d+$/);
+      const hasNewOctave = /\d+$/.test(newNote);
+      const finalNote = hasNewOctave ? newNote.toUpperCase() : `${newNote.toUpperCase()}${octaveMatch ? octaveMatch[0] : '3'}`;
+      newTuning[stringIdx] = finalNote;
       return { ...prev, tuning: newTuning };
     });
-  }, []);
+  }, [updateTabSheet]);
 
-  const updateMetadata = useCallback((field: keyof TabSheet, value: string | number) => {
-    setTabSheet(prev => {
-      let finalValue = value;
-      if (field === 'bpm') {
-        const sanitized = parseInt(value.toString().replace(/^0+/, ''));
-        finalValue = isNaN(sanitized) ? 0 : sanitized;
-        if (finalValue > 400) finalValue = 400;
-      }
-      return { ...prev, [field]: finalValue };
-    });
-  }, []);
+  const loadDemo = useCallback(() => {
+    const demo: TabSheet = {
+      ...DEFAULT_TAB,
+      title: "Stratum Demo Lick",
+      artist: "Batman",
+      rows: [
+        {
+          id: crypto.randomUUID(),
+          columns: Array(32).fill(null).map((_, i) => {
+            const col = createBlankColumn();
+            if (i === 0) col.notes[5] = "0";
+            if (i === 1) col.notes[5] = "3";
+            if (i === 2) col.notes[4] = "0";
+            if (i === 3) col.notes[4] = "2";
+            return col;
+          })
+        }
+      ]
+    };
+    updateTabSheet(demo);
+  }, [updateTabSheet]);
+
+  const loadProject = useCallback((id: string) => {
+    const project = storage.loadProjectById(id);
+    if (project) {
+      updateTabSheet(project, false); // Loading shouldn't wipe future history
+      setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+    }
+  }, [updateTabSheet]);
+
+  const createNewProject = useCallback(() => {
+    localStorage.removeItem('stratum_active_id'); 
+    updateTabSheet(DEFAULT_TAB);
+    setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+  }, [updateTabSheet]);
+
+  const addRow = useCallback(() => {
+    updateTabSheet(prev => ({ ...prev, rows: [...prev.rows, createBlankRow()] }));
+  }, [updateTabSheet]);
+
+  const toggleMeasureNumbers = useCallback(() => {
+    updateTabSheet(prev => ({
+      ...prev,
+      config: { ...prev.config, showMeasureNumbers: !prev.config.showMeasureNumbers }
+    }));
+  }, [updateTabSheet]);
 
   return (
     <TabContext.Provider value={{ 
-      tabSheet, cursor, updateNote, setCursor, addRow, saveManual, 
-      updateTuning, updateMetadata, loadProject, createNewProject,
-      toggleMeasureNumbers
+      tabSheet, cursor, updateNote, setCursor, addRow, saveManual: () => saveTabToLocal(tabSheet), 
+      updateTuning, updateMetadata: (f, v) => updateTabSheet(p => ({...p, [f]: v})), 
+      loadProject, createNewProject, toggleMeasureNumbers,
+      undo, redo, shiftNotes, loadDemo // THE REPAIR: Added missing actions
     }}>
       {children}
     </TabContext.Provider>

@@ -1,11 +1,10 @@
 /**
  * @file useAudioEngine.ts
- * @description Sequence-Aware Audio Engine. 
- * Orchestrates multiple notes within a single rhythmic cell.
+ * @description Master Audio Controller. Fixed click-latency, added Harmonics & Selective Playback prep.
  */
 
 import * as Tone from 'tone';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { useTab } from '../store/TabContext';
 
 export const useAudioEngine = () => {
@@ -13,15 +12,23 @@ export const useAudioEngine = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const sampler = useRef<Tone.Sampler | null>(null);
   const vibrato = useRef<Tone.Vibrato | null>(null);
+  const filter = useRef<Tone.Filter | null>(null);
 
+  /**
+   * NO-NONSENSE PRIMING:
+   * We initialize the audio context once the component mounts to kill the double-click bug.
+   */
   const initAudio = useCallback(async () => {
-    if (sampler.current) {
-      if (Tone.context.state !== 'running') await Tone.start();
-      return;
+    if (Tone.context.state !== 'running') {
+      await Tone.start();
+      console.log("STRATUM_AUDIO: Context Resumed.");
     }
+    
+    if (sampler.current) return;
 
-    // Initialize Vibrato LFO node
-    vibrato.current = new Tone.Vibrato(5, 0.1).toDestination();
+    // 1. TACTICAL EFFECTS CHAIN: Filter -> Vibrato -> Destination
+    filter.current = new Tone.Filter(1000, "highpass").toDestination();
+    vibrato.current = new Tone.Vibrato(5, 0.1).connect(filter.current);
 
     sampler.current = new Tone.Sampler({
       urls: {
@@ -32,18 +39,12 @@ export const useAudioEngine = () => {
       },
       baseUrl: "https://nbrosowsky.github.io/tonejs-instruments/samples/guitar-acoustic/",
       onload: () => {
-        console.log("STRATUM_AUDIO: Legato Engine Online.");
+        console.log("STRATUM_AUDIO: Acoustic Samples Ready.");
         setIsLoaded(true);
       }
     }).connect(vibrato.current);
-
-    await Tone.start();
   }, []);
 
-  /**
-   * TACTICAL NOTE SCHEDULER:
-   * Splits input like "3p0" into ["3", "0"] and plays them in sequence.
-   */
   const playNote = useCallback((stringIndex: number, fret: string, time?: number) => {
     if (!sampler.current || !isLoaded || fret === "") return;
 
@@ -51,49 +52,59 @@ export const useAudioEngine = () => {
     const lowerFret = fret.toLowerCase();
     const triggerTime = time || Tone.now();
     
-    // 1. DEAD NOTE PROTOCOL: (X)
+    // 1. DEAD NOTE: (X)
     if (lowerFret.includes('x')) {
       sampler.current.triggerAttackRelease("E1", "32n", triggerTime, 0.3);
       return;
     }
 
-    // 2. SEQUENCE PARSING: Identify multiple notes in the cell
-    const noteSequence = fret.split(/[hp\/~m]/i).filter(n => n !== "");
+    // 2. SEQUENCE PARSING
+    const noteSequence = fret.split(/[hp\/~m\*]/i).filter(n => n !== "");
     if (noteSequence.length === 0) return;
 
-    // 3. PRIMARY NOTE: The strike
-    const firstFret = parseInt(noteSequence[0]);
-    if (!isNaN(firstFret)) {
-      const pitch = Tone.Frequency(baseNote).transpose(firstFret).toNote();
+    // 3. ARTICULATION MODIFIERS
+    const isHarmonic = lowerFret.includes('*');
+    const isMuted = lowerFret.includes('m');
+
+    const triggerNote = (fretVal: string, delay = 0, vel = 0.7) => {
+      const fretNum = parseInt(fretVal);
+      if (isNaN(fretNum)) return;
+
+      let freq = Tone.Frequency(baseNote).transpose(fretNum);
       
-      let duration = "4n"; 
-      let velocity = 0.7;
-
-      if (lowerFret.includes('m')) { // Palm Mute Choke
-        duration = "64n"; 
-        velocity = 0.4;
+      /**
+       * ANALYTIC HARMONICS:
+       * Natural harmonics on the 12th fret double the frequency (1 octave up).
+       * We simulate this by transposing +12 and engaging the highpass filter.
+       */
+      if (isHarmonic) {
+        freq = freq.transpose(12);
+        filter.current?.frequency.setValueAtTime(2000, triggerTime + delay);
+      } else {
+        // Reset filter for standard notes
+        filter.current?.frequency.setValueAtTime(10, triggerTime + delay);
       }
 
-      if (lowerFret.includes('~')) { // Vibrato Mod Ramp
-        vibrato.current?.depth.setValueAtTime(0.4, triggerTime);
-        vibrato.current?.depth.linearRampToValueAtTime(0, triggerTime + 0.6);
-      }
+      const pitch = freq.toNote();
+      const duration = isMuted ? "64n" : "4n";
+      const finalVel = isMuted ? 0.4 : vel;
 
-      sampler.current.triggerAttackRelease(pitch, duration, triggerTime, velocity); 
+      sampler.current?.triggerAttackRelease(pitch, duration, triggerTime + delay, finalVel);
+    };
+
+    // Play primary note
+    triggerNote(noteSequence[0]);
+
+    // Play legato note if exists
+    if (noteSequence.length > 1) {
+      const legatoDelay = Tone.Time("16n").toSeconds();
+      triggerNote(noteSequence[1], legatoDelay, 0.5);
     }
 
-    // 4. LEGATO NOTE: The secondary action (Hammer/Pull/Slide)
-    if (noteSequence.length > 1) {
-      const secondFret = parseInt(noteSequence[1]);
-      if (!isNaN(secondFret)) {
-        const secondPitch = Tone.Frequency(baseNote).transpose(secondFret).toNote();
-        
-        // Schedule the second note 1/16th note after the first
-        const legatoDelay = Tone.Time("16n").toSeconds();
-        
-        // Legato notes have a softer attack velocity
-        sampler.current.triggerAttackRelease(secondPitch, "8n", triggerTime + legatoDelay, 0.5);
-      }
+    // Vibrato logic
+    if (lowerFret.includes('~')) {
+      vibrato.current?.depth.setValueAtTime(0.4, triggerTime);
+      vibrato.current?.depth.linearRampToValueAtTime(0, triggerTime + 0.6);
     }
   }, [tabSheet.tuning, isLoaded]);
 
