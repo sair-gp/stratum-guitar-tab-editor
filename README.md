@@ -61,7 +61,7 @@ Solution: Refactored the entire TabStore to utilize a hierarchical tree structur
 Challenge: Global keyboard listeners are "greedy." Without proper gating, trying to type a new shortcut name in the settings menu would simultaneously input notes into the background editor.
 Solution: Implemented a Tactical Focus Gate using HTML data-attributes and tag-name verification. The Keyboard Engine intercepts the event and performs a metadata check: if document.activeElement is an input or carries the data-settings-input attribute, the engine immediately mutes itself, allowing the configuration UI to take priority.
 
-
+[Live Demo](https://stratum-guitar-tab-editor.vercel.app/)
 
 ---
 *Created with the **STRATUM** Protocol — Built for Precision.*
