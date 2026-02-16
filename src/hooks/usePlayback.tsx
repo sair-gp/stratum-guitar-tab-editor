@@ -1,7 +1,6 @@
 /**
  * @file usePlayback.ts
- * @description Stratum Playback Engine. 
- * Optimized for 16-column measures and absolute time scheduling.
+ * @description Updated for 32-column Pro Staff playback synchronization.
  */
 
 import * as Tone from 'tone';
@@ -27,12 +26,11 @@ export const usePlayback = () => {
   const startPlayback = useCallback(async () => {
     const transport = Tone.getTransport();
 
-    // Ensure AudioContext is running before scheduling
     await initAudio();
     if (Tone.getContext().state !== 'running') {
       await Tone.getContext().resume();
     }
-    await Tone.loaded(); // Wait for acoustic guitar samples
+    await Tone.loaded();
 
     if (transport.state === 'started') {
       stopPlayback();
@@ -42,33 +40,23 @@ export const usePlayback = () => {
     setIsPlaying(true);
     transport.bpm.value = tabSheet.bpm;
 
-    // Calculate seconds per column (assuming 16 columns = 1 measure of 4/4)
     const secondsPerBeat = 60 / tabSheet.bpm;
-    const secondsPerColumn = secondsPerBeat / 4; // One sixteenth note
+    const secondsPerColumn = secondsPerBeat / 4; 
 
     tabSheet.rows.forEach((row, rowIndex) => {
       row.columns.forEach((col, colIndex) => {
         
-        /**
-         * ABSOLUTE SCHEDULING:
-         * We calculate exactly how many seconds from the start this note should play.
-         * This bypasses Tone.js's "16-step bar" restriction entirely.
-         */
-        const totalColumnOffset = (rowIndex * 16) + colIndex;
+        // NO-NONSENSE: Math updated for 32 columns
+        const totalColumnOffset = (rowIndex * 32) + colIndex;
         const startTime = totalColumnOffset * secondsPerColumn;
 
         const eventId = transport.schedule((time) => {
-          /**
-           * Tone.Draw schedules the React state update to happen 
-           * exactly when the audio thread reaches this point.
-           */
           Tone.Draw.schedule(() => {
             setCursor({ rowIndex, columnIndex: colIndex, stringIndex: 0 });
           }, time);
 
           col.notes.forEach((fret, stringIndex) => {
             if (fret !== "" && fret !== "-") {
-              // We pass 'time' to playNote for sub-millisecond precision
               playNote(stringIndex, fret, time); 
             }
           });
@@ -78,7 +66,6 @@ export const usePlayback = () => {
       });
     });
 
-    // Start with a 200ms buffer to ensure first note is caught
     transport.start("+0.2");
   }, [tabSheet, initAudio, playNote, setCursor, stopPlayback]);
 

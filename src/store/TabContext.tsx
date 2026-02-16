@@ -1,7 +1,6 @@
 /**
  * @file TabContext.tsx
- * @description Centralized state management for the Stratum editor.
- * Upgraded to handle Multi-Project Cataloging and UUID-based switching.
+ * @description Secure Project Lifecycle Management. Fixed ID-Leakage during new project creation.
  */
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
@@ -17,13 +16,13 @@ interface TabContextType {
   saveManual: () => void;
   updateTuning: (stringIndex: number, newNote: string) => void;
   updateMetadata: (field: keyof TabSheet, value: string | number) => void;
-  // CATALOG ACTIONS
   loadProject: (id: string) => void;
   createNewProject: () => void;
+  toggleMeasureNumbers: () => void;
 }
 
 const TabContext = createContext<TabContextType | undefined>(undefined);
-const FIXED_COLS = 16;
+const FIXED_COLS = 32;
 
 const createBlankColumn = (): TabColumn => ({
   id: crypto.randomUUID(),
@@ -35,6 +34,35 @@ const createBlankRow = (): TabRow => ({
   columns: Array(FIXED_COLS).fill(null).map(createBlankColumn),
 });
 
+const migrateTabSheet = (data: TabSheet): TabSheet => {
+  const isOldLayout = data.rows.length > 0 && data.rows[0].columns.length === 16;
+  if (!isOldLayout) {
+    const config = data.config || { showMeasureNumbers: false };
+    return { ...data, config };
+  }
+
+  const newRows: TabRow[] = [];
+  const oldRows = data.rows;
+
+  for (let i = 0; i < oldRows.length; i += 2) {
+    const firstHalf = oldRows[i].columns;
+    const secondHalf = oldRows[i + 1] 
+      ? oldRows[i + 1].columns 
+      : Array(16).fill(null).map(createBlankColumn);
+
+    newRows.push({
+      id: crypto.randomUUID(),
+      columns: [...firstHalf, ...secondHalf]
+    });
+  }
+
+  return {
+    ...data,
+    rows: newRows,
+    config: data.config || { showMeasureNumbers: false }
+  };
+};
+
 const DEFAULT_TAB: TabSheet = {
   title: "New Tab",
   artist: "Unknown Artist",
@@ -42,38 +70,43 @@ const DEFAULT_TAB: TabSheet = {
   rows: [createBlankRow()],
   bpm: 120,          
   timeSignature: 4,
+  config: {
+    showMeasureNumbers: false
+  }
 };
 
 export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Initialize from the last active project in LocalStorage or fall back to Default
   const [tabSheet, setTabSheet] = useState<TabSheet>(DEFAULT_TAB);
   const [cursor, setCursor] = useState<CursorPosition>({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
 
-  /**
-   * PERSISTENCE: Saves current state using the updated ID-aware storage logic.
-   */
   const saveManual = useCallback(() => {
     saveTabToLocal(tabSheet);
-    console.log("STRATUM_LOG: Project Persisted to Catalog.");
   }, [tabSheet]);
 
-  /**
-   * CATALOG: Wipes the current state and initializes a fresh UUID project.
-   */
-  const createNewProject = useCallback(() => {
-    localStorage.removeItem('stratum_active_id'); // Force storage to generate new ID on save
-    setTabSheet(DEFAULT_TAB);
-    setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+  const toggleMeasureNumbers = useCallback(() => {
+    setTabSheet(prev => ({
+      ...prev,
+      config: { ...prev.config, showMeasureNumbers: !prev.config.showMeasureNumbers }
+    }));
   }, []);
 
   /**
-   * CATALOG: Swaps the entire TabSheet state with data from a specific ID.
+   * NO-NONSENSE PROJECT RESET:
+   * Explicitly clears the active project ID to force a fresh save.
    */
+  const createNewProject = useCallback(() => {
+    // TACTICAL: Clear the session ID before resetting state
+    localStorage.removeItem('stratum_active_id'); 
+    setTabSheet(DEFAULT_TAB);
+    setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+    console.log("STRATUM_LOG: Workspace Cleared. Next save will create a new entry.");
+  }, []);
+
   const loadProject = useCallback((id: string) => {
     const project = storage.loadProjectById(id);
     if (project) {
-      setTabSheet(project);
-      setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 }); // Reset cursor for safety
+      setTabSheet(migrateTabSheet(project));
+      setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
     }
   }, []);
 
@@ -86,17 +119,54 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const currentVal = prev.rows[cursor.rowIndex].columns[cursor.columnIndex].notes[cursor.stringIndex];
       let finalValue = value;
 
-      if (value !== "" && !isNaN(parseInt(value))) {
-        if (currentVal.length === 1 && currentVal !== "") {
-          const combined = currentVal + value;
-          const num = parseInt(combined);
-          if (num <= 24) finalValue = combined;
-        }
-      }
+      const techSymbols = ['h', 'p', '/', '~', 'm', 'x', 'v', 's'];
+      const isTechnique = techSymbols.includes(value.toLowerCase());
 
-      if (finalValue !== "") {
-        const checkNum = parseInt(finalValue);
-        if (isNaN(checkNum) || checkNum < 0 || checkNum > 24) return prev;
+      if (isTechnique) {
+        let techToApply = value.toLowerCase();
+        if (techToApply === 'v') techToApply = '~';
+        if (techToApply === 's') techToApply = '/';
+
+        // TACTICAL GUARD: Techniques usually need a preceding note.
+        if (currentVal === "" && techToApply !== 'x') return prev;
+
+        // TOGGLE LOGIC: If the cell ends with this exact tech, remove it.
+        if (currentVal.endsWith(techToApply)) {
+          finalValue = currentVal.slice(0, -1);
+        } else {
+          // NO-NONSENSE: Append the tech to the current sequence (e.g., "3" -> "3p")
+          finalValue = currentVal + techToApply;
+        }
+      } else if (value !== "" && !isNaN(parseInt(value))) {
+        /**
+         * LEGATO SEQUENCE LOGIC:
+         * 1. If the current value ends with a technique (e.g., "3p"), 
+         * we append the new digit to start the next note (e.g., "3p0").
+         * 2. If it's just a number, we use existing multi-digit logic (e.g., "1" -> "12").
+         */
+        const lastChar = currentVal.slice(-1);
+        const endsWithTech = techSymbols.includes(lastChar.toLowerCase());
+
+        if (endsWithTech) {
+          // APPEND: Start of the second note in the legato chain
+          finalValue = currentVal + value;
+        } else {
+          // STANDARD: Multi-digit fret logic for the current note
+          // We find the last "block" of numbers and see if we can append
+          const matches = currentVal.match(/\d+$/);
+          const currentDigits = matches ? matches[0] : "";
+          
+          if (currentDigits.length === 1 && currentDigits !== "") {
+            const combined = currentDigits + value;
+            if (parseInt(combined) <= 24) {
+              finalValue = currentVal.slice(0, -currentDigits.length) + combined;
+            } else {
+              finalValue = value; // Reset if over 24
+            }
+          } else {
+            finalValue = value; // Default to new number if block is full or empty
+          }
+        }
       }
 
       const newRows = [...prev.rows];
@@ -104,13 +174,11 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newCols = [...targetRow.columns];
       const targetCol = { ...newCols[cursor.columnIndex] };
       const newNotes = [...targetCol.notes];
-
       newNotes[cursor.stringIndex] = finalValue;
       targetCol.notes = newNotes;
       newCols[cursor.columnIndex] = targetCol;
       targetRow.columns = newCols;
       newRows[cursor.rowIndex] = targetRow;
-
       return { ...prev, rows: newRows };
     });
   }, [cursor]);
@@ -124,33 +192,22 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const updateMetadata = useCallback((field: keyof TabSheet, value: string | number) => {
-  setTabSheet(prev => {
-    let finalValue = value;
-
-    // TACTICAL GUARD: BPM Sanitization
-    if (field === 'bpm') {
-      // Convert to string to strip leading zeros, then back to number
-      const sanitized = parseInt(value.toString().replace(/^0+/, ''));
-      
-      // If the field is empty or result is NaN (like when backspacing everything)
-      // we default to 1 to keep the engine alive, but the UI can show 0
-      finalValue = isNaN(sanitized) ? 0 : sanitized;
-
-      // Optional: Enforce a Maximum to prevent scheduling 1,000,000 notes
-      if (finalValue > 400) finalValue = 400;
-    }
-
-    return {
-      ...prev,
-      [field]: finalValue
-    };
-  });
-}, []);
+    setTabSheet(prev => {
+      let finalValue = value;
+      if (field === 'bpm') {
+        const sanitized = parseInt(value.toString().replace(/^0+/, ''));
+        finalValue = isNaN(sanitized) ? 0 : sanitized;
+        if (finalValue > 400) finalValue = 400;
+      }
+      return { ...prev, [field]: finalValue };
+    });
+  }, []);
 
   return (
     <TabContext.Provider value={{ 
       tabSheet, cursor, updateNote, setCursor, addRow, saveManual, 
-      updateTuning, updateMetadata, loadProject, createNewProject 
+      updateTuning, updateMetadata, loadProject, createNewProject,
+      toggleMeasureNumbers
     }}>
       {children}
     </TabContext.Provider>
