@@ -57,7 +57,7 @@ export const TabGrid = () => {
                 type="number"
                 value={tabSheet.bpm === 0 ? '' : tabSheet.bpm} 
                 onChange={(e) => updateMetadata('bpm', parseInt(e.target.value) || 0)}
-                onBlur={() => { if (tabSheet.bpm < 40) updateMetadata('bpm', 120); }}
+                onBlur={() => { if (tabSheet.bpm < 10) updateMetadata('bpm', 120); }}
                 className="w-12 bg-transparent text-yellow-500 font-mono text-xs border-none outline-none focus:ring-0"
               />
             </div>

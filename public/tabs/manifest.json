@@ -1,6 +1,7 @@
 {
   "demos": [
     { "id": "playing-god", "title": "Playing God", "artist": "Polyphia", "file": "/tabs/Playing_god_demo.txt" },
-    { "id": "mario-bros", "title": "Super Mario Bros.", "artist": "Koji Kondo", "file": "/tabs/mario-bros.txt" }
+    { "id": "mario-bros", "title": "Super Mario Bros.", "artist": "Koji Kondo", "file": "/tabs/mario-bros.txt" },
+    { "id": "soh", "title": "Song Of Healing", "artist": "Koji Kondo", "file": "/tabs/soh.txt" }
   ]
 }
