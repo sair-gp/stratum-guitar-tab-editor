@@ -1,6 +1,6 @@
 /**
  * @file asciiExport.ts
- * @description Enhanced Exporter. Supports mid-song BPM markers and direct download triggers.
+ * @description Precision Exporter. Handles variable-width harmonics <12> while maintaining staff alignment.
  */
 
 import type { TabSheet } from '../types/tab';
@@ -12,18 +12,25 @@ export const generateAsciiTab = (tabSheet: TabSheet): string => {
   tabSheet.rows.forEach((row, rIdx) => {
     output += `Staff ${rIdx + 1}\n`;
     
-    // ANALYTIC: Create a line for BPM markers above the strings
-    let tempoLine = "    "; // Initial padding for "E |"
-
+    // Initial padding for tuning labels (e.g., "E |")
+    let tempoLine = "    "; 
     const stringLines = tabSheet.tuning.map(t => `${t.replace(/\d/, '').padEnd(2, ' ')}|`);
 
     row.columns.forEach((col, cIdx) => {
+      /**
+       * TACTICAL ALIGNMENT:
+       * 1. Calculate the longest note in this specific column.
+       * 2. Add 1 for spacing. Minimum width is 3 to keep the classic look.
+       */
+      const maxNoteLength = Math.max(...col.notes.map(n => n.length));
+      const colWidth = Math.max(3, maxNoteLength + 1);
+
       // 1. BPM Marker Logic
       if (col.bpm) {
         const marker = `[BPM:${col.bpm}]`;
-        tempoLine += marker.padEnd(3, ' ');
+        tempoLine += marker.padEnd(colWidth, ' ');
       } else {
-        tempoLine += "   ";
+        tempoLine += "".padEnd(colWidth, ' ');
       }
 
       // 2. Structural Bar Lines (Reactive to Meter)
@@ -32,13 +39,14 @@ export const generateAsciiTab = (tabSheet: TabSheet): string => {
       
       if (cIdx > 0 && cIdx % colsPerMeasure === 0) {
         stringLines.forEach((_, i) => stringLines[i] += '|');
-        tempoLine += " "; // Align tempoLine with structural bar
+        tempoLine += " "; // Space to account for the bar line '|'
       }
 
-      // 3. String Content
+      // 3. String Content with Dynamic Padding
       col.notes.forEach((note, sIdx) => {
         const val = note === "" ? "-" : note;
-        stringLines[sIdx] += val.padEnd(3, '-');
+        // Ensure every string in this column uses the exact same width
+        stringLines[sIdx] += val.padEnd(colWidth, '-');
       });
     });
 
@@ -51,10 +59,6 @@ export const generateAsciiTab = (tabSheet: TabSheet): string => {
   return output;
 };
 
-/**
- * TACTICAL: Direct Download Trigger
- * Decouples the file generation from the UI component.
- */
 export const triggerAsciiDownload = (tabSheet: TabSheet) => {
   const content = generateAsciiTab(tabSheet);
   const blob = new Blob([content], { type: 'text/plain' });

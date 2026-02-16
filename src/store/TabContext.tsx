@@ -1,6 +1,6 @@
 /**
  * @file TabContext.tsx
- * @description Master State Controller. Exposing setTabSheet for strict type compliance.
+ * @description Master State Controller. Integrated Harmonic Bracket toggling and sequence awareness.
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
@@ -9,7 +9,6 @@ import { saveTabToLocal, storage } from '../utils/storage';
 
 interface TabContextType {
   tabSheet: TabSheet;
-  // TACTICAL: Expose the standard React state setter for major structural swaps (Salvage)
   setTabSheet: React.Dispatch<React.SetStateAction<TabSheet>>;
   cursor: CursorPosition;
   updateNote: (value: string) => void;
@@ -124,23 +123,60 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { rowIndex, columnIndex, stringIndex } = cursor;
       const currentVal = prev.rows[rowIndex].columns[columnIndex].notes[stringIndex];
       let finalValue = value;
+      
       const techSymbols = ['h', 'p', '/', '~', 'm', 'x', 'v', 's'];
       const isTechnique = techSymbols.includes(value.toLowerCase());
+      const isHarmonicToggle = value.toLowerCase() === 'harmonic';
 
-      if (isTechnique) {
+      // 1. HARMONIC BRACKET TOGGLE <>
+      if (isHarmonicToggle) {
+        if (currentVal === "") return prev;
+        finalValue = currentVal.includes('<') 
+          ? currentVal.replace(/[<>]/g, "") 
+          : `<${currentVal}>`;
+      } 
+      // 2. TECHNIQUE HANDLING
+      else if (isTechnique) {
         let tech = value.toLowerCase() === 'v' ? '~' : (value.toLowerCase() === 's' ? '/' : value.toLowerCase());
         if (currentVal === "" && tech !== 'x') return prev;
-        finalValue = currentVal.endsWith(tech) ? currentVal.slice(0, -1) : currentVal + tech;
-      } else if (value !== "" && !isNaN(parseInt(value))) {
-        const lastChar = currentVal.slice(-1);
-        if (techSymbols.includes(lastChar.toLowerCase())) {
-          finalValue = currentVal + value;
+        
+        // Ensure techniques are added inside brackets if they exist
+        if (currentVal.includes('<')) {
+          const content = currentVal.replace(/[<>]/g, "");
+          const nextContent = content.endsWith(tech) ? content.slice(0, -1) : content + tech;
+          finalValue = `<${nextContent}>`;
         } else {
-          const digits = currentVal.match(/\d+$/)?.[0] || "";
-          if (digits.length === 1 && digits !== "") {
-            const combined = digits + value;
-            finalValue = parseInt(combined) <= 24 ? currentVal.slice(0, -1) + combined : value;
-          } else finalValue = value;
+          finalValue = currentVal.endsWith(tech) ? currentVal.slice(0, -1) : currentVal + tech;
+        }
+      } 
+      // 3. NUMBER INPUT
+      else if (value !== "" && !isNaN(parseInt(value))) {
+        if (currentVal.includes('<')) {
+          const content = currentVal.replace(/[<>]/g, "");
+          const lastChar = content.slice(-1);
+          let nextContent;
+
+          if (techSymbols.includes(lastChar.toLowerCase())) {
+            nextContent = content + value;
+          } else {
+            const digits = content.match(/\d+$/)?.[0] || "";
+            if (digits.length === 1 && digits !== "") {
+              const combined = digits + value;
+              nextContent = parseInt(combined) <= 24 ? content.slice(0, -1) + combined : value;
+            } else nextContent = value;
+          }
+          finalValue = `<${nextContent}>`;
+        } else {
+          const lastChar = currentVal.slice(-1);
+          if (techSymbols.includes(lastChar.toLowerCase())) {
+            finalValue = currentVal + value;
+          } else {
+            const digits = currentVal.match(/\d+$/)?.[0] || "";
+            if (digits.length === 1 && digits !== "") {
+              const combined = digits + value;
+              finalValue = parseInt(combined) <= 24 ? currentVal.slice(0, -1) + combined : value;
+            } else finalValue = value;
+          }
         }
       }
 
@@ -168,22 +204,13 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [updateTabSheet]);
 
   const loadDemo = useCallback(() => {
+    // Note: We are transitioning to the ASCII File Loader for the "Playing God" track.
     const demo: TabSheet = {
       ...DEFAULT_TAB,
       id: crypto.randomUUID(),
       title: "Stratum Demo Lick",
       artist: "Batman",
-      rows: [{
-        id: crypto.randomUUID(),
-        columns: Array(32).fill(null).map((_, i) => {
-          const col = createBlankColumn();
-          if (i === 0) col.notes[5] = "0";
-          if (i === 1) col.notes[5] = "3";
-          if (i === 2) col.notes[4] = "0";
-          if (i === 3) col.notes[4] = "2";
-          return col;
-        })
-      }]
+      rows: [createBlankRow()]
     };
     updateTabSheet(demo);
   }, [updateTabSheet]);
@@ -212,7 +239,7 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const value = useMemo(() => ({ 
     tabSheet, 
-    setTabSheet, // EXPOSED: Allows TabGrid to swap state during salvage
+    setTabSheet, 
     cursor, 
     updateNote, 
     setCursor, 

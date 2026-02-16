@@ -124,6 +124,7 @@ export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose:
               </div>
             </div>
             {[1, 2, 3, 4, 5, 6].map((num) => renderShortcutRow(`String ${num}`, `SELECT_STRING_${num}`))}
+            {renderShortcutRow("Natural Harmonic < >", "TOGGLE_HARMONIC")}
             {renderShortcutRow("Hammer-on", "TOGGLE_H")}
             {renderShortcutRow("Pull-off", "TOGGLE_P")}
             {renderShortcutRow("Slide ( / )", "TOGGLE_/")}

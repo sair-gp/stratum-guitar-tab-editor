@@ -1,13 +1,13 @@
 /**
  * @file useKeyboardEngine.ts
- * @description Command Engine: Direct integration of Alt+N (Staff) and Alt+E (Export).
+ * @description Command Engine: Harmonic Toggle & Direct Input Refinement.
  */
 
 import { useEffect } from 'react';
 import { useTab } from '../store/TabContext';
 import { useShortcuts } from '../store/ShortcutContext';
 import { useAudioEngine } from './useAudioEngine';
-import { triggerAsciiDownload } from '../utils/asciiExport'; // BAT-DIRECT LINK
+import { triggerAsciiDownload } from '../utils/asciiExport';
 
 export const useKeyboardEngine = () => {
   const { 
@@ -29,27 +29,19 @@ export const useKeyboardEngine = () => {
 
       /**
        * 0. ALT-COMMANDS: STAFF NAVIGATION & SYSTEM ACTIONS
-       * Protected layer to avoid Browser default collisions.
        */
       if (e.altKey) {
-        e.preventDefault(); // NIX BROWSER MENUS
-        
-        // JUMP STAVES
+        e.preventDefault();
         if (key === 'arrowup' || key === 'arrowdown') {
           const direction = key === 'arrowdown' ? 1 : -1;
           const newRow = Math.max(0, Math.min(tabSheet.rows.length - 1, cursor.rowIndex + direction));
           setCursor({ ...cursor, rowIndex: newRow });
           return;
         }
-
-        // TIME-SHIFTING
         if (key === 'arrowright') { shiftNotes('right'); return; }
         if (key === 'arrowleft') { shiftNotes('left'); return; }
-
-        // TACTICAL SYSTEM ACTIONS
-        if (key === 'n') { addRow(); return; } // Alt + N = New Staff
-        if (key === 'e') { triggerAsciiDownload(tabSheet); return; } // Alt + E = Export
-        
+        if (key === 'n') { addRow(); return; } 
+        if (key === 'e') { triggerAsciiDownload(tabSheet); return; }
         return;
       }
 
@@ -58,7 +50,6 @@ export const useKeyboardEngine = () => {
        */
       if (e.ctrlKey || e.metaKey) {
         if (key === 's') { e.preventDefault(); saveManual(); return; }
-        // REMOVED Ctrl+N to prevent browser window popups
         if (key === 'z') { 
           e.preventDefault(); 
           if (e.shiftKey) redo(); else undo();
@@ -74,11 +65,15 @@ export const useKeyboardEngine = () => {
         return;
       }
 
-      // 3. SHORTCUTS & ARTICULATIONS
+      /**
+       * 3. SHORTCUTS & ARTICULATIONS
+       * TACTICAL: This handles remappable techniques like TOGGLE_HARMONIC.
+       */
       const action = shortcuts[key];
       if (action?.startsWith('TOGGLE_')) {
         e.preventDefault();
         const tech = action.split('_')[1].toLowerCase();
+        // This will send 'harmonic' if the action is TOGGLE_HARMONIC
         updateNote(tech);
         return;
       }
@@ -124,8 +119,11 @@ export const useKeyboardEngine = () => {
         return;
       }
 
-      // 7. ARTICULATION DIRECT INPUT
-      if (/^[hps\/~mx\*]$/i.test(key)) {
+      /**
+       * 7. ARTICULATION DIRECT INPUT
+       * TACTICAL: Removed '*' to enforce the new Bracket < > standard.
+       */
+      if (/^[hps\/~mx]$/i.test(key)) {
         e.preventDefault();
         updateNote(key);
         return;
