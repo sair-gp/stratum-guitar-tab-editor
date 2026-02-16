@@ -58,7 +58,7 @@ export const TabGrid = () => {
     max="400"
   />
             </div>
-            <div className="h-4 w-[1px] bg-zinc-800"></div>
+            <div className="h-4 w-px bg-zinc-800"></div>
             <div className="flex items-center gap-2">
               <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">METER</span>
               <select 
@@ -109,7 +109,7 @@ export const TabGrid = () => {
           <div key={row.id} className="relative">
              <div className="absolute -top-8 left-0 w-full flex items-center gap-4 px-2">
               <span className="text-[10px] font-black text-zinc-800 uppercase tracking-[0.5em]">STAFF_{idx + 1}</span>
-              <div className="h-[1px] flex-1 bg-zinc-900/50"></div>
+              <div className="h-px flex-1 bg-zinc-900/50"></div>
             </div>
             <TabRowComponent row={row} rowIndex={idx} />
           </div>

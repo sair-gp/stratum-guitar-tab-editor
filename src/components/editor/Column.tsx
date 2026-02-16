@@ -57,7 +57,7 @@ export const Column = ({ column, rowIndex, colIndex, isBarLine }: ColumnProps) =
         return (
           <div key={stringIdx} className="relative flex items-center justify-center w-full h-8 px-0.5">
             {/* Horizontal String Line */}
-            <div className={`absolute w-full h-[1px] z-0 transition-colors ${
+            <div className={`absolute w-full h-px z-0 transition-colors ${
               isSelectedCell ? 'bg-yellow-500/60' : 'bg-zinc-800/40'
             }`}></div>
             

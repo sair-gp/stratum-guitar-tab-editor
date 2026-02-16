@@ -2,7 +2,7 @@
  * @file TabRowComponent.tsx
  * @description The horizontal staff container with FUNCTIONAL auto-scroll.
  */
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { TabRow } from '../../types/tab';
 import { Column } from './Column';
 import { TuningLabel } from './TuningLabel';

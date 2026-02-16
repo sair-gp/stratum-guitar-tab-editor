@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { TabSheet, TabRow, TabColumn, CursorPosition } from '../types/tab';
-import { loadTabFromLocal, saveTabToLocal, storage } from '../utils/storage';
+import { saveTabToLocal, storage } from '../utils/storage';
 
 interface TabContextType {
   tabSheet: TabSheet;
