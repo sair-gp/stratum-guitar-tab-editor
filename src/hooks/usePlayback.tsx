@@ -1,73 +1,91 @@
 /**
  * @file usePlayback.ts
- * @description Updated for 32-column Pro Staff playback synchronization.
+ * @description High-Performance Transport. Uses Windowed Scheduling to kill INP lag.
  */
 
 import * as Tone from 'tone';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTab } from '../store/TabContext';
 import { useAudioEngine } from './useAudioEngine';
 
 export const usePlayback = () => {
-  const { tabSheet, setCursor } = useTab();
-  const { playNote, initAudio } = useAudioEngine();
+  const { tabSheet, setCursor, cursor } = useTab();
+  const { playNote, initAudio, resumeContext } = useAudioEngine();
   const [isPlaying, setIsPlaying] = useState(false);
-  const scheduledEvents = useRef<number[]>([]);
+  
+  // TACTICAL: Use a single Sequence instead of thousands of individual events
+  const sequenceRef = useRef<Tone.Sequence | null>(null);
 
   const stopPlayback = useCallback(() => {
-    const transport = Tone.getTransport();
-    transport.stop();
-    transport.cancel();
-    scheduledEvents.current.forEach(id => transport.clear(id));
-    scheduledEvents.current = [];
+    Tone.Transport.stop();
+    Tone.Transport.cancel();
+    if (sequenceRef.current) {
+      sequenceRef.current.dispose();
+      sequenceRef.current = null;
+    }
     setIsPlaying(false);
   }, []);
 
-  const startPlayback = useCallback(async () => {
-    const transport = Tone.getTransport();
+  const startPlayback = useCallback(() => {
+    // 1. SYNC HANDSHAKE: Zero-latency hardware wake-up
+    resumeContext();
 
-    await initAudio();
-    if (Tone.getContext().state !== 'running') {
-      await Tone.getContext().resume();
-    }
-    await Tone.loaded();
-
-    if (transport.state === 'started') {
+    if (Tone.Transport.state === 'started') {
       stopPlayback();
       return;
     }
 
-    setIsPlaying(true);
-    transport.bpm.value = tabSheet.bpm;
+    const execute = async () => {
+      // 2. BUFFER CHECK
+      await initAudio();
+      await Tone.loaded();
 
-    const secondsPerBeat = 60 / tabSheet.bpm;
-    const secondsPerColumn = secondsPerBeat / 4; 
+      setIsPlaying(true);
+      Tone.Transport.bpm.value = tabSheet.bpm;
 
-    tabSheet.rows.forEach((row, rowIndex) => {
-      row.columns.forEach((col, colIndex) => {
-        
-        // NO-NONSENSE: Math updated for 32 columns
-        const totalColumnOffset = (rowIndex * 32) + colIndex;
-        const startTime = totalColumnOffset * secondsPerColumn;
+      // 3. ANALYTIC WINDOWING: Flatten columns for the sequence
+      const allCols = tabSheet.rows.flatMap((row, rIdx) => 
+        row.columns.map(col => ({ ...col, rIdx }))
+      );
 
-        const eventId = transport.schedule((time) => {
+      const startIndex = (cursor.rowIndex * 32) + cursor.columnIndex;
+      const playbackSlice = allCols.slice(startIndex);
+
+      // 4. THE SEQUENCE: Only schedules the NEXT note in the buffer
+      sequenceRef.current = new Tone.Sequence(
+        (time, colData) => {
+          // Identify global position for UI sync
+          const globalIdx = allCols.indexOf(colData);
+          const rIdx = Math.floor(globalIdx / 32);
+          const cIdx = globalIdx % 32;
+
           Tone.Draw.schedule(() => {
-            setCursor({ rowIndex, columnIndex: colIndex, stringIndex: 0 });
+            setCursor({ rowIndex: rIdx, columnIndex: cIdx, stringIndex: 0 });
           }, time);
 
-          col.notes.forEach((fret, stringIndex) => {
+          // Trigger notes for this column
+          colData.notes.forEach((fret, sIdx) => {
             if (fret !== "" && fret !== "-") {
-              playNote(stringIndex, fret, time); 
+              playNote(sIdx, fret, time);
             }
           });
-        }, startTime);
+        },
+        playbackSlice,
+        "16n" // Tactical resolution: 16th notes
+      );
 
-        scheduledEvents.current.push(eventId);
-      });
-    });
+      // 5. START: Small offset to prevent first-note jitter
+      sequenceRef.current.start(0);
+      Tone.Transport.start("+0.1");
+    };
 
-    transport.start("+0.2");
-  }, [tabSheet, initAudio, playNote, setCursor, stopPlayback]);
+    execute();
+  }, [tabSheet, cursor, initAudio, resumeContext, playNote, setCursor, stopPlayback]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => stopPlayback();
+  }, [stopPlayback]);
 
   return { startPlayback, stopPlayback, isPlaying };
 };

@@ -1,6 +1,6 @@
 /**
  * @file TabContext.tsx
- * @description Master State Controller. Fixed Interface/Value mismatch.
+ * @description Master State Controller. Fixed Project Loading & Pro-Demo Injection.
  */
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
@@ -10,6 +10,8 @@ import { saveTabToLocal, storage } from '../utils/storage';
 interface TabContextType {
   tabSheet: TabSheet;
   cursor: CursorPosition;
+  isAudioReady: boolean;
+  setIsAudioReady: (ready: boolean) => void;
   updateNote: (value: string) => void;
   setCursor: (pos: CursorPosition) => void;
   addRow: () => void;
@@ -19,7 +21,6 @@ interface TabContextType {
   loadProject: (id: string) => void;
   createNewProject: () => void;
   toggleMeasureNumbers: () => void;
-  // NO-NONSENSE NEW ACTIONS
   undo: () => void;
   redo: () => void;
   shiftNotes: (direction: 'left' | 'right') => void;
@@ -52,8 +53,8 @@ const DEFAULT_TAB: TabSheet = {
 export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [tabSheet, setTabSheet] = useState<TabSheet>(DEFAULT_TAB);
   const [cursor, setCursor] = useState<CursorPosition>({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+  const [isAudioReady, setIsAudioReady] = useState(false);
   
-  // METICULOUS HISTORY STACKS
   const [history, setHistory] = useState<TabSheet[]>([]);
   const [future, setFuture] = useState<TabSheet[]>([]);
 
@@ -89,22 +90,16 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newRows = [...prev.rows];
       const row = { ...newRows[cursor.rowIndex] };
       const cols = [...row.columns];
-      
-      // We extract just the notes to shift them
       const notesToShift = cols.map(c => [...c.notes]);
 
       if (direction === 'right') {
-        // TACTICAL: Insert empty notes at current position, pop the end
         notesToShift.splice(cursor.columnIndex, 0, Array(6).fill(''));
         notesToShift.pop();
       } else {
-        // TACTICAL: Remove notes at current position, push empty to end
-        // If we want to prevent "Accidental Deletion," we could check if notes are empty here.
         notesToShift.splice(cursor.columnIndex, 1);
         notesToShift.push(Array(6).fill(''));
       }
 
-      // Re-assign notes back to the fixed Column containers
       const updatedCols = cols.map((col, idx) => ({
         ...col,
         notes: notesToShift[idx]
@@ -120,14 +115,15 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateTabSheet(prev => {
       const currentVal = prev.rows[cursor.rowIndex].columns[cursor.columnIndex].notes[cursor.stringIndex];
       let finalValue = value;
-      const techSymbols = ['h', 'p', '/', '~', 'm', 'x', 'v', 's'];
+      const techSymbols = ['h', 'p', '/', '~', 'm', 'x', 'v', 's', '*'];
       const isTechnique = techSymbols.includes(value.toLowerCase());
 
       if (isTechnique) {
         let techToApply = value.toLowerCase();
         if (techToApply === 'v') techToApply = '~';
         if (techToApply === 's') techToApply = '/';
-        if (currentVal === "" && techToApply !== 'x') return prev;
+        if (currentVal === "" && techToApply !== 'x' && techToApply !== '*') return prev;
+        
         if (currentVal.endsWith(techToApply)) {
           finalValue = currentVal.slice(0, -1);
         } else {
@@ -180,38 +176,56 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [updateTabSheet]);
 
+  /**
+   * RECRUITER-PROOF DEMO:
+   * A technical showcase of the engine's capabilities.
+   */
   const loadDemo = useCallback(() => {
     const demo: TabSheet = {
       ...DEFAULT_TAB,
       title: "Stratum Demo Lick",
-      artist: "Batman",
+      artist: "Polyphia Style",
+      bpm: 110,
       rows: [
         {
           id: crypto.randomUUID(),
           columns: Array(32).fill(null).map((_, i) => {
             const col = createBlankColumn();
+            // A technical sequences with legato and harmonics
             if (i === 0) col.notes[5] = "0";
-            if (i === 1) col.notes[5] = "3";
-            if (i === 2) col.notes[4] = "0";
-            if (i === 3) col.notes[4] = "2";
+            if (i === 2) col.notes[5] = "3p0"; 
+            if (i === 4) col.notes[4] = "0";
+            if (i === 6) col.notes[4] = "2h4"; 
+            if (i === 8) col.notes[3] = "0";
+            if (i === 10) col.notes[3] = "2*";  // Harmonic
+            if (i === 12) col.notes[2] = "0";
+            if (i === 14) col.notes[2] = "4/6"; // Slide
+            if (i === 16) col.notes[1] = "5~";   // Vibrato
             return col;
           })
         }
       ]
     };
     updateTabSheet(demo);
+    setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
+    console.log("STRATUM_LOG: Demo Loaded.");
   }, [updateTabSheet]);
 
   const loadProject = useCallback((id: string) => {
     const project = storage.loadProjectById(id);
     if (project) {
-      updateTabSheet(project, false); // Loading shouldn't wipe future history
+      // TACTICAL: Reset history stacks when loading a new project
+      setHistory([]);
+      setFuture([]);
+      updateTabSheet(project, false); 
       setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
     }
   }, [updateTabSheet]);
 
   const createNewProject = useCallback(() => {
     localStorage.removeItem('stratum_active_id'); 
+    setHistory([]);
+    setFuture([]);
     updateTabSheet(DEFAULT_TAB);
     setCursor({ rowIndex: 0, columnIndex: 0, stringIndex: 0 });
   }, [updateTabSheet]);
@@ -229,10 +243,10 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <TabContext.Provider value={{ 
-      tabSheet, cursor, updateNote, setCursor, addRow, saveManual: () => saveTabToLocal(tabSheet), 
+      tabSheet, cursor, isAudioReady, setIsAudioReady, updateNote, setCursor, addRow, saveManual: () => saveTabToLocal(tabSheet), 
       updateTuning, updateMetadata: (f, v) => updateTabSheet(p => ({...p, [f]: v})), 
       loadProject, createNewProject, toggleMeasureNumbers,
-      undo, redo, shiftNotes, loadDemo // THE REPAIR: Added missing actions
+      undo, redo, shiftNotes, loadDemo
     }}>
       {children}
     </TabContext.Provider>

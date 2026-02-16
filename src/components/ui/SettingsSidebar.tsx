@@ -1,6 +1,6 @@
 /**
  * @file SettingsSidebar.tsx
- * @description Pro-Staff Dashboard. Added Global Config toggles.
+ * @description Pro-Staff Dashboard. Added Demo Injection and Firefox-Proof Audio Priming.
  */
 
 import { useTab } from '../../store/TabContext';
@@ -8,10 +8,12 @@ import { useShortcuts } from '../../store/ShortcutContext';
 import { storage } from '../../utils/storage';
 import type { ProjectMetadata } from '../../utils/storage';
 import { useMemo, useState, useEffect } from 'react';
+import { useAudioEngine } from '../../hooks/useAudioEngine'; // METICULOUS: Import engine
 
 export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
-  const { loadProject, createNewProject, saveManual, tabSheet, toggleMeasureNumbers } = useTab();
+  const { loadProject, createNewProject, loadDemo, saveManual, tabSheet, toggleMeasureNumbers } = useTab();
   const { shortcuts, remapKey } = useShortcuts();
+  const { resumeContext } = useAudioEngine(); // TACTICAL: Get the sync bridge
   
   const [view, setView] = useState<'catalog' | 'shortcuts'>('catalog');
   const [catalog, setCatalog] = useState<ProjectMetadata[]>([]);
@@ -76,12 +78,31 @@ export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose:
           <div className="space-y-4">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Saved_Archives</h3>
-              <button onClick={() => { saveManual(); createNewProject(); onClose(); }} className="bg-yellow-600 text-black px-3 py-1 rounded-md text-[9px] font-black uppercase">New_Project</button>
+              <div className="flex gap-2">
+                {/* NO-NONSENSE DEMO BUTTON */}
+                <button 
+                  onClick={() => { resumeContext(); loadDemo(); onClose(); }} 
+                  className="bg-zinc-800 text-yellow-500 border border-yellow-500/20 px-3 py-1 rounded-md text-[9px] font-black uppercase hover:bg-yellow-500 hover:text-black transition-all"
+                >
+                  Load_Demo
+                </button>
+                <button 
+                  onClick={() => { resumeContext(); saveManual(); createNewProject(); onClose(); }} 
+                  className="bg-yellow-600 text-black px-3 py-1 rounded-md text-[9px] font-black uppercase"
+                >
+                  New_Project
+                </button>
+              </div>
             </div>
+            {catalog.length === 0 && (
+              <div className="text-center py-12 border-2 border-dashed border-zinc-800 rounded-2xl">
+                <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest">No Projects Found</p>
+              </div>
+            )}
             {catalog.map(p => (
               <div 
                 key={p.id}
-                onClick={() => { loadProject(p.id); onClose(); }}
+                onClick={() => { resumeContext(); loadProject(p.id); onClose(); }} // SYNC PRIME
                 className="group flex justify-between items-center bg-zinc-950 p-4 rounded-xl border border-zinc-800 hover:border-yellow-500/50 cursor-pointer"
               >
                 <div>
@@ -90,7 +111,7 @@ export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose:
                 </div>
                 <button 
                   onClick={(e) => { e.stopPropagation(); if(confirm("Nuke project?")) { storage.deleteProject(p.id); setCatalog(storage.getIndex()); }}}
-                  className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-500 text-[10px] font-black"
+                  className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-500 text-[10px] font-black transition-all"
                 >
                   DELETE
                 </button>
@@ -99,7 +120,6 @@ export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose:
           </div>
         ) : (
           <div className="space-y-6">
-            {/* TACTICAL: Global UI Configuration */}
             <div className="space-y-3">
               <h3 className="text-[9px] text-zinc-600 font-black uppercase tracking-[0.2em] border-b border-zinc-800 pb-2">Staff_Configuration</h3>
               <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-all">
@@ -132,7 +152,7 @@ export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose:
       </div>
 
       <div className="p-6 border-t border-zinc-800 bg-zinc-950/50">
-        <button onClick={() => storage.clearAll()} className="w-full py-3 text-red-900 border border-red-900/20 rounded-xl text-[9px] font-black tracking-tighter hover:bg-red-900 hover:text-white transition-all uppercase">
+        <button onClick={() => { if(confirm("Nuke everything?")) storage.clearAll(); setCatalog([]); }} className="w-full py-3 text-red-900 border border-red-900/20 rounded-xl text-[9px] font-black tracking-tighter hover:bg-red-900 hover:text-white transition-all uppercase">
           Wipe_All_Local_Data
         </button>
       </div>

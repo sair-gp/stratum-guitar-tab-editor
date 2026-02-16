@@ -1,19 +1,30 @@
 /**
  * @file PlaybackToolbar.tsx
- * @description Integrated control for BPM, Time Signature, and Transport.
+ * @description Pro-Transport Control. Integrated Audio Priming to fix double-click bug.
  */
 
 import { useTab } from '../../store/TabContext';
 import { usePlayback } from '../../hooks/usePlayback';
+import { useAudioEngine } from '../../hooks/useAudioEngine'; // NEW: Need initAudio
 
 export const PlaybackToolbar = () => {
   const { tabSheet, updateMetadata } = useTab();
   const { startPlayback, isPlaying } = usePlayback();
+  const { initAudio } = useAudioEngine();
+
+  /**
+   * NO-NONSENSE TRANSPORT:
+   * Awaits the engine priming before triggering the playhead.
+   */
+  const handleTogglePlay = async () => {
+    const ready = await initAudio();
+    if (ready) {
+      startPlayback();
+    }
+  };
 
   return (
     <div className="flex items-center gap-6 bg-zinc-900/50 px-4 py-2 rounded-xl border border-zinc-800 shadow-inner">
-      
-      {/* BPM Input */}
       <div className="flex items-center gap-3">
         <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">BPM</span>
         <input 
@@ -26,7 +37,6 @@ export const PlaybackToolbar = () => {
         />
       </div>
 
-      {/* Time Signature Select */}
       <div className="flex items-center gap-3 border-l border-zinc-800 pl-6">
         <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">METER</span>
         <select 
@@ -40,9 +50,8 @@ export const PlaybackToolbar = () => {
         </select>
       </div>
 
-      {/* Playback Toggle */}
       <button 
-        onClick={startPlayback}
+        onClick={handleTogglePlay} // TACTICAL: Using the async wrapper
         className={`ml-4 px-4 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-widest border transition-all ${
           isPlaying 
             ? 'bg-red-500/10 border-red-500 text-red-500 animate-pulse' 
