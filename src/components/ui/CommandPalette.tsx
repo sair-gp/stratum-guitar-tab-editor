@@ -11,7 +11,7 @@ import { generateAsciiTab } from '../../utils/asciiExport';
 export const CommandPalette = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const { tabSheet, addRow, saveManual, undo, redo, shiftNotes } = useTab();
+  const { tabSheet, addRow, saveManual, undo, redo } = useTab();
   const { startPlayback } = usePlayback();
 
   const commands = useMemo(() => [
