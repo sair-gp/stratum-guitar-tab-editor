@@ -1,67 +1,49 @@
-TL;DR:
+Stratum 🎸
 
-> Stratum is a fast, web-based guitar tab editor with semantic keyboard controls. Free and no login required. Start composing instantly.
+A keyboard-driven, web-based guitar tab editor built for speed.
 
+[Live Demo](https://stratum-guitar-tab-editor.vercel.app/) 
 
-# 🎸 Stratum
-> **High-Precision Multi-Row Guitar Tablature Editor**
+![alt text](/public/images/interface.png)
 
-Stratum is a web-based guitar tab editor built for speed. Unlike traditional "click-and-place" editors, Stratum utilizes a **semantic keyboard engine** and a **fixed 24-measure grid** to provide a composition experience that feels like playing an instrument.
+About The Project
 
+Stratum is a solo, open-source project I built because I was frustrated with existing web-based tab editors. Most of them rely heavily on "click-and-place" interfaces, which feel slow when you just want to get an idea down.
 
+I wanted an editor that felt closer to coding or playing an instrument, where your hands stay on the keyboard and you can flow through a composition.
 
----
+It's built with React 18, TypeScript, and Vite, focusing on performance and a strict grid layout to keep even complex scores organized.
+Key Features
 
-## ⚡ Core Philosophy
-Stratum is built on three pillars of design:
-- **Analytic Navigation:** Jump across strings and measures using custom keybindings.
-- **Meticulous Layout:** A strict 24-column grid ensures your score remains perfectly aligned across multiple staves.
-- **Tactical Configuration:** Full control over your environment, from custom tunings to personalized shortcut registries.
+    Keyboard-First Design: Almost every action, from navigation to composition, can be done without the mouse. It has a "vim-like" feel tailored for guitar players.
 
-## 🚀 Technical Highlights
-- **Framework:** React 18 + TypeScript (Strict Mode)
-- **State Management:** Context API with specialized stores for Tab Data and User Shortcuts.
-- **Persistence:** Versioned LocalStorage persistence with manual "Save to Disk" protocols.
-- **Keyboard Engine:** High-performance event listener for 3D coordinate-based navigation (Row, Column, String).
+    Fixed Grid Layout: A structured 32-column grid ensures your timing and layout remain consistent across multiple staves.
 
-## 🎹 Global Commands & HUD
-Stratum features a persistent Heads-Up Display to keep you in the zone:
-- **Shift + Arrows:** Rapid measure-snapping (Jump 4 columns).
-- **Q, B, G, D, A, E (Default):** Semantic string selection.
-- **Enter:** Automatic measure iteration/Row wrapping.
-- **Ctrl + S:** Manual state persistence.
+    ASCII Import/Export: I built a custom parsing engine to import "messy" old text tabs found around the internet and standardize them into the modern grid.
 
-## 🏗️ Architecture
-The project follows a modular "DNA-first" approach:
-1. **Types Layer:** Single source of truth for the tab hierarchy.
-2. **Store Layer:** Coordinate-based state updates.
-3. **Hook Layer:** Decoupled keyboard and navigation logic.
-4. **UI Layer:** Highly responsive CSS Grid components.
+    Audio Playback: Built-in physics-based audio engine using Tone.js for immediate playback of your tab, including techniques like harmonics and palm mutes.
 
-🛠️ Technical Challenges & Solutions
-1. The Double-Digit Fret Race Condition
+Technical Challenges I Solved
 
-Challenge: Standard guitar fretboards range from 0 to 24. A naive implementation of keyboard input would overwrite '1' with '9' when attempting to type fret '19'.
-Solution: Implemented a Temporal Buffer Logic within the state-update function. The engine checks the current cell value: if it contains a single digit and the resulting combination is ≤24, it appends the new input. Otherwise, it treats the input as a fresh entry. This ensures fluid, natural data entry without requiring a secondary "confirm" key.
-2. Semantic Shortcut Mapping & Conflict Resolution
+This project presented some interesting engineering hurdles. Here are a few:
 
-Challenge: Users need the ability to remap keys (e.g., changing 'B' to 'K' for the 2nd string). However, allowing arbitrary remapping could lead to "ghost" mappings where one key triggers multiple actions, or worse, hijacks numeric fret data.
-Solution: Developed a Shortcut Registry with a strictly enforced 1:1 action-to-key ratio.
+1. Handling Fast Fret Typing (The "Double-Digit" Problem)
 
-    Ghost Prevention: The remapping logic performatively deletes any existing key-assignment for a target action before assigning a new one.
+Standard guitar frets go up to 24. If you type '1' and quickly type '2', a naive system might overwrite the '1' with a '2'.
+Solution: I implemented a temporal buffer in the state management. The engine checks the current cell; if it's a single digit and the next input creates a valid fret (≤24), it combines them into '12'. This allows for natural, fast typing without needing a "confirm" key.
 
-    Data Integrity Gate: Numeric keys (0-9) are hard-coded as "Reserved" at the store level, preventing users from accidentally disabling their ability to input fret data.
+2. Cleaning up "Dirty" ASCII Tabs
 
-3. Coordinate-Based 3D State Management
+Text tabs from the 90s are notoriously inconsistent in formatting.
+Solution: I developed a "Universal Wash Engine." Instead of relying on rigid character counting, it calculates the relative percentage position of a note within a text string and snaps it to the nearest rhythmic slot in Stratum's 32-column grid.
 
-Challenge: Transitioning from a single-row "flat" grid to a professional multi-staff document required a move from 2D coordinates (Column,String) to 3D coordinates (Row,Column,String).
-Solution: Refactored the entire TabStore to utilize a hierarchical tree structure. Navigation logic was updated with Boundary Awareness, allowing the cursor to "wrap" from the end of one staff (Column 23) to the beginning of the next (Row + 1, Column 0) seamlessly, maintaining the composer's flow.
-4. Focus Gating & Event Interference
+3. Managing Complex State (Undo/Redo)
 
-Challenge: Global keyboard listeners are "greedy." Without proper gating, trying to type a new shortcut name in the settings menu would simultaneously input notes into the background editor.
-Solution: Implemented a Tactical Focus Gate using HTML data-attributes and tag-name verification. The Keyboard Engine intercepts the event and performs a metadata check: if document.activeElement is an input or carries the data-settings-input attribute, the engine immediately mutes itself, allowing the configuration UI to take priority.
+Ensuring that complex actions, like time-shifting notes across bars or toggling techniques, didn't corrupt the document history.
+Solution: I implemented a robust state management system using React Context and a comprehensive testing suite (Vitest + JSDOM) to verify that the history stack remains synchronized during high-speed editing.
+⌨️ Shortcuts Cheat Sheet
 
-[Live Demo](https://stratum-guitar-tab-editor.vercel.app/)
+Stratum is designed for power users. You can view these at any time in the app by pressing Ctrl + K to open the Command Palette.
 
----
-*Created with the **STRATUM** Protocol — Built for Precision.*
+![Shortcuts Cheat Sheet](./public/images/cheatSheet.png)
+

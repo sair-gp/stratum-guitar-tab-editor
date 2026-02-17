@@ -30,7 +30,7 @@ function App() {
                   onClick={() => setIsSettingsOpen(true)}
                   className="px-4 py-2 bg-zinc-800/50 rounded border border-zinc-800/50 text-[10px] font-mono text-zinc-400 hover:text-yellow-500 transition-all"
                 >
-                  CONFIG_SHORTCUTS
+                  SETTINGS
                 </button>
               </div>
             </div>

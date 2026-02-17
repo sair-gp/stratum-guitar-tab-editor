@@ -92,7 +92,7 @@ export const TabGrid = () => {
               onClick={handleExportAscii}
               className="bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white px-4 py-2 rounded-lg transition-all font-mono text-[9px] uppercase tracking-widest"
             >
-              EXPORT_ASCII
+              EXPORT ASCII
             </button>
             <button 
               onClick={addRow}
