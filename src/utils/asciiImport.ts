@@ -4,17 +4,33 @@
  */
 
 import type { TabRow, TabColumn } from '../types/tab';
+import { washDirtyAscii } from './universalWash';
 
 export const parseAsciiToTab = (text: string): { 
   title: string, artist: string, bpm: number, timeSignature: number, rows: TabRow[] 
 } => {
+
+
+  const isStratum = text.includes("# STRATUM_PROTOCOL_V1");
+  
+  if (!isStratum) {
+    const washedRows = washDirtyAscii(text);
+    return {
+      title: "Washed Import",
+      artist: "Universal Salvage",
+      bpm: 120,
+      timeSignature: 4,
+      rows: washedRows
+    };
+  }
+
   const lines = text.replace(/\r/g, '').split('\n');
   const resultRows: TabRow[] = [];
   
   // 1. HEADER PARSING
   let title = "Salvaged Tab", artist = "Unknown Artist", bpm = 120, timeSignature = 4;
-  if (lines[0]?.includes(' - ')) {
-    const parts = lines[0].split(' - ');
+  if (lines[1]?.includes(' - ')) {
+    const parts = lines[1].split(' - ');
     title = parts[0].trim(); artist = parts[1].trim();
   }
   const meta = lines.find(l => l.includes('Tempo:'));

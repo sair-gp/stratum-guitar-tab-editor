@@ -6,7 +6,8 @@
 import type { TabSheet } from '../types/tab';
 
 export const generateAsciiTab = (tabSheet: TabSheet): string => {
-  let output = `${tabSheet.title} - ${tabSheet.artist}\n`;
+  let output = `# STRATUM_PROTOCOL_V1\n`; 
+  output += `${tabSheet.title} - ${tabSheet.artist}\n`;
   output += `Tempo: ${tabSheet.bpm} BPM | Meter: ${tabSheet.timeSignature}/4\n\n`;
 
   tabSheet.rows.forEach((row, rIdx) => {
