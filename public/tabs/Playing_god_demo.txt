@@ -1,3 +1,4 @@
+# STRATUM_PROTOCOL_V1
 Playing god demo - polyphia
 Tempo: 136 BPM | Meter: 4/4
 

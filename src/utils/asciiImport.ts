@@ -69,7 +69,7 @@ export const parseAsciiToTab = (text: string): {
           let maxJump = 1;
 
           for (let sIdx = 0; sIdx < 6; sIdx++) {
-            const char = layers[sIdx][x];
+            const char = layers[sIdx] ? layers[sIdx][x] : undefined;
             if (char && char !== '-' && char !== ' ' && char !== '|') {
               let note = "";
               let tempX = x;
