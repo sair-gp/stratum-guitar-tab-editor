@@ -99,7 +99,7 @@ export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose:
                 >
                   Salvage_Beta
                 </button>
-                <button onClick={() => { resumeContext(); loadDemo(); onClose(); }} className="bg-zinc-800 text-yellow-500 border border-yellow-500/20 px-3 py-1 rounded-md text-[9px] font-black uppercase hover:bg-yellow-500 hover:text-black transition-all">Demo</button>
+                <button onClick={() => { resumeContext(); loadDemo(); onClose(); }} className="bg-zinc-800 text-yellow-500 border border-yellow-500/20 px-3 py-1 rounded-md text-[9px] font-black uppercase hover:bg-yellow-500 hover:text-black transition-all hidden">Demo</button>
                 <button onClick={() => { resumeContext(); saveManual(); createNewProject(); onClose(); }} className="bg-yellow-600 text-black px-3 py-1 rounded-md text-[9px] font-black uppercase">New</button>
               </div>
             </div>
@@ -124,6 +124,7 @@ export const SettingsSidebar = ({ isOpen, onClose }: { isOpen: boolean, onClose:
               </div>
             </div>
             {[1, 2, 3, 4, 5, 6].map((num) => renderShortcutRow(`String ${num}`, `SELECT_STRING_${num}`))}
+            <hr></hr>
             {renderShortcutRow("Natural Harmonic < >", "TOGGLE_HARMONIC")}
             {renderShortcutRow("Hammer-on", "TOGGLE_H")}
             {renderShortcutRow("Pull-off", "TOGGLE_P")}
