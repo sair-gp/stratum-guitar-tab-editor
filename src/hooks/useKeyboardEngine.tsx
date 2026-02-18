@@ -19,9 +19,17 @@ export const useKeyboardEngine = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isGridCell = target.hasAttribute('data-editor-input');
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA';
+      // Replace lines 22-23 with this:
+const target = e.target as HTMLElement;
+
+// NO-NONSENSE GUARD: Window and Document do not have .hasAttribute
+const isGridCell = (target && typeof target.hasAttribute === 'function') 
+  ? target.hasAttribute('data-editor-input') 
+  : false;
+
+// Handle potential undefined tagName
+const tagName = target?.tagName || '';
+const isInput = tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA';
 
       if (isInput && !isGridCell) return; 
 
